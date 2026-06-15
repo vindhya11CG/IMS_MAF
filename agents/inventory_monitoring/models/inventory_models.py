@@ -1,21 +1,10 @@
+"""Data models for the Inventory Monitoring Agent."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
 
-@dataclass
-class InventoryEvent:
-    event_id: int
-    event_type: str
-    sku_id: int
-    location_id: int
-    quantity_change: int
-    event_timestamp: str
-    reference_id: str
-    source_location_id: Optional[int]
-    destination_location_id: Optional[int]
-    event_reason: str
-    created_by: str
 
 @dataclass
 class InventoryPosition:
@@ -27,6 +16,7 @@ class InventoryPosition:
     reorder_point_qty: int
     allocated_qty: int
     last_counted_date: Optional[str]
+
 
 @dataclass
 class InventorySnapshot:
@@ -42,6 +32,7 @@ class InventorySnapshot:
     adjustments: int
     closing_stock: int
 
+
 @dataclass
 class InventoryCalculationResult:
     sku_id: int
@@ -52,6 +43,7 @@ class InventoryCalculationResult:
     incoming_stock: int
     adjustments: int
     source: str
+
 
 @dataclass
 class RiskAssessment:
