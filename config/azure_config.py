@@ -5,11 +5,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 try:
-    from azure.ai.openai import OpenAIClient
-    from azure.core.credentials import AzureKeyCredential
+    from openai import AzureOpenAI
 except ImportError:  # pragma: no cover
-    OpenAIClient = None  # type: ignore[assignment]
-    AzureKeyCredential = None  # type: ignore[assignment]
+    AzureOpenAI = None  # type: ignore[assignment]
 
 
 @dataclass
@@ -43,15 +41,16 @@ class AzureOpenAIConfig:
 
 class AzureOpenAIClient:
     def __init__(self, config: AzureOpenAIConfig) -> None:
-        if OpenAIClient is None or AzureKeyCredential is None:
+        if AzureOpenAI is None:
             raise ImportError(
-                "azure-ai-openai and azure-core are required to use AzureOpenAIClient."
+                "openai package is required to use AzureOpenAIClient. Install with: pip install openai"
             )
         config.validate()
         self.config = config
-        self.client = OpenAIClient(
-            endpoint=config.endpoint,
-            credential=AzureKeyCredential(config.api_key),
+        self.client = AzureOpenAI(
+            api_key=config.api_key,
+            api_version=config.api_version,
+            azure_endpoint=config.endpoint,
         )
 
     def create_chat_completion(
@@ -60,8 +59,8 @@ class AzureOpenAIClient:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
-        response = self.client.get_chat_completions(
-            deployment_name=self.config.deployment,
+        response = self.client.chat.completions.create(
+            model=self.config.deployment,
             messages=messages,
             temperature=temperature if temperature is not None else self.config.temperature,
             max_tokens=max_tokens if max_tokens is not None else self.config.max_tokens,
