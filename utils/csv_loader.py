@@ -5,7 +5,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
-from agents.inventory_monitoring.models.inventory_models import InventoryPosition
 from .parsing import parse_int, parse_optional_int
 
 logger = logging.getLogger(__name__)
@@ -60,6 +59,9 @@ class CsvInventoryDataLoader:
     def load_inventory_positions(self) -> List[InventoryPosition]:
         """Load inventory positions from CSV."""
         rows = self._read_rows(self.root_dir / "db3_csv_export" / "inventory_positions.csv")
+        # Local import to avoid circular import at module import time
+        from agents.inventory_monitoring.models.inventory_models import InventoryPosition
+
         positions: List[InventoryPosition] = []
         for row in rows:
             try:
