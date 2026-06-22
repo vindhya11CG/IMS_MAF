@@ -1,0 +1,4 @@
+dc_id,dc_name,state_id,city,address,square_footage,capacity_units,region_code
+1,West Coast DC,01,Los Angeles,4500 Industrial Blvd, Los Angeles, CA 90058,150000,75000,WEST
+2,Central Hub DC,04,Chicago,8200 Logistics Way, Chicago, IL 60638,200000,100000,CENTRAL
+3,East Coast DC,08,New York,950 Distribution Ave, Newark, NJ 07114,180000,90000,EAST

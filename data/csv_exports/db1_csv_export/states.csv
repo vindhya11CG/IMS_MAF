@@ -1,0 +1,12 @@
+state_code,state_name,region_id,state_abbrev
+01,California,1,CA
+02,Washington,1,WA
+03,Texas,2,TX
+04,Illinois,2,IL
+05,Ohio,2,OH
+06,Michigan,2,MI
+07,Florida,3,FL
+08,New York,3,NY
+09,Georgia,3,GA
+10,North Carolina,3,NC
+11,Pennsylvania,3,PA

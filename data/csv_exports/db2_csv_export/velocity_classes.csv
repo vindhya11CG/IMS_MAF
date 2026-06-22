@@ -1,0 +1,4 @@
+velocity_class_id,velocity_code,velocity_name,annual_units_min,annual_units_max,description
+1,A,High Velocity,50000,999999,Fast-moving items with high annual turnover
+2,B,Medium Velocity,5000,49999,Moderate-moving items with regular demand
+3,C,Low Velocity,1,4999,Slow-moving items with occasional demand

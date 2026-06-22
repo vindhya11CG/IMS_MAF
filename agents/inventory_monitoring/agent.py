@@ -48,7 +48,10 @@ class InventoryMonitoringAgent(AgentService):
             valid_snapshots = snapshot_result.valid_snapshots
             
             # Load other required data
-            positions = self.loader.load_inventory_positions()
+            positions = [
+                position if isinstance(position, InventoryPosition) else InventoryPosition(**position)
+                for position in self.loader.load_inventory_positions()
+            ]
             in_transit = self.loader.load_in_transit_inventory()
             
             logger.info(f"\nData Summary:")

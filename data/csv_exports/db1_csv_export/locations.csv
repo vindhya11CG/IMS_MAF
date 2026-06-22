@@ -1,0 +1,54 @@
+location_id,location_type,location_name,state_id,city
+1,STORE,San Francisco Downtown,01,San Francisco
+2,STORE,Los Angeles Beverly Hills,01,Los Angeles
+3,STORE,San Diego Gaslamp,01,San Diego
+4,STORE,Orange County Fashion,01,Irvine
+5,STORE,San Jose Valley Fair,01,San Jose
+6,STORE,Seattle Pike Place,02,Seattle
+7,STORE,Tacoma Downtown,02,Tacoma
+8,STORE,Spokane Valley,02,Spokane
+9,STORE,Dallas Downtown,03,Dallas
+10,STORE,Houston Midtown,03,Houston
+11,STORE,Austin 6th Street,03,Austin
+12,STORE,San Antonio Alamo,03,San Antonio
+13,STORE,Arlington Town Center,03,Arlington
+14,STORE,Fort Worth Clearfork,03,Fort Worth
+15,STORE,Chicago Loop,04,Chicago
+16,STORE,Chicago Northbrook,04,Northbrook
+17,STORE,Oak Brook,04,Oak Brook
+18,STORE,Aurora,04,Aurora
+19,STORE,Naperville,04,Naperville
+20,STORE,Columbus High Street,05,Columbus
+21,STORE,Cleveland Public Sq,05,Cleveland
+22,STORE,Cincinnati Downtown,05,Cincinnati
+23,STORE,Toledo,05,Toledo
+24,STORE,Dayton,05,Dayton
+25,STORE,Detroit Downtown,06,Detroit
+26,STORE,Ann Arbor,06,Ann Arbor
+27,STORE,Grand Rapids,06,Grand Rapids
+28,STORE,Lansing,06,Lansing
+29,STORE,Miami Brickell,07,Miami
+30,STORE,Orlando Downtown,07,Orlando
+31,STORE,Tampa Downtown,07,Tampa
+32,STORE,Jacksonville,07,Jacksonville
+33,STORE,Fort Lauderdale,07,Fort Lauderdale
+34,STORE,West Palm Beach,07,West Palm Beach
+35,STORE,Manhattan 5th Avenue,08,New York
+36,STORE,Brooklyn Heights,08,Brooklyn
+37,STORE,Albany Downtown,08,Albany
+38,STORE,Buffalo,08,Buffalo
+39,STORE,Rochester,08,Rochester
+40,STORE,Atlanta Midtown,09,Atlanta
+41,STORE,Savannah Historic,09,Savannah
+42,STORE,Augusta,09,Augusta
+43,STORE,Marietta,09,Marietta
+44,STORE,Charlotte Uptown,10,Charlotte
+45,STORE,Raleigh Downtown,10,Raleigh
+46,STORE,Greensboro,10,Greensboro
+47,STORE,Asheville,10,Asheville
+48,STORE,Philadelphia Downtown,11,Philadelphia
+49,STORE,Pittsburgh Downtown,11,Pittsburgh
+50,STORE,Philadelphia King of Prussia,11,King of Prussia
+51,DC,West Coast DC,01,Los Angeles
+52,DC,Central Hub DC,04,Chicago
+53,DC,East Coast DC,08,New York

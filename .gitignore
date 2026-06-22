@@ -23,9 +23,6 @@ Thumbs.db
 *.log
 *.tmp
 
-# CSV exports (if generated dynamically)
-csv_exports/
-
 # Documentation build (if any)
 docs/_build/
 
