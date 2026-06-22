@@ -1,0 +1,36 @@
+supplier_id,supplier_code,supplier_name,country,payment_term_id,quality_rating,on_time_delivery_percent,active_status,preferred_flag
+1,SUP-001,Global Tech Supplies,China,3,4.8,95,ACTIVE,Y
+2,SUP-002,Premium Electronics Dist,Taiwan,1,4.7,94,ACTIVE,Y
+3,SUP-003,Apparel World Ltd,Vietnam,1,4.5,92,ACTIVE,Y
+4,SUP-004,Fashion Imports Co,India,1,4.3,90,ACTIVE,N
+5,SUP-005,Home Furnishings Plus,China,2,4.6,93,ACTIVE,Y
+6,SUP-006,Quality Goods Inc,USA,3,4.9,98,ACTIVE,Y
+7,SUP-007,Sporting Equipment Co,Germany,1,4.7,96,ACTIVE,Y
+8,SUP-008,Outdoor Gear Ltd,Canada,3,4.6,94,ACTIVE,N
+9,SUP-009,Toy Masters Global,China,1,4.4,89,ACTIVE,Y
+10,SUP-010,Children Products LLC,Mexico,1,4.2,88,ACTIVE,N
+11,SUP-011,Health & Beauty Supplies,Japan,3,4.8,97,ACTIVE,Y
+12,SUP-012,Cosmetics International,Korea,1,4.6,93,ACTIVE,Y
+13,SUP-013,Grocery Distributors Inc,USA,3,4.9,99,ACTIVE,Y
+14,SUP-014,Fresh Foods Ltd,Brazil,2,4.5,91,ACTIVE,Y
+15,SUP-015,Seasonal Products Co,China,1,4.3,87,ACTIVE,N
+16,SUP-016,Organic Goods Ltd,Germany,3,4.7,95,ACTIVE,Y
+17,SUP-017,Electronics Components,Taiwan,1,4.8,96,ACTIVE,Y
+18,SUP-018,Tech Parts Dist,South Korea,1,4.6,92,ACTIVE,Y
+19,SUP-019,Fabric & Textile Co,Vietnam,1,4.4,89,ACTIVE,N
+20,SUP-020,Furniture Imports Ltd,India,2,4.5,90,ACTIVE,Y
+21,SUP-021,Sports Equipment Plus,USA,3,4.8,97,ACTIVE,Y
+22,SUP-022,Toy Distributors Global,China,1,4.3,86,ACTIVE,N
+23,SUP-023,Beauty Supply Wholesale,Japan,1,4.7,94,ACTIVE,Y
+24,SUP-024,Grocery Direct Source,USA,3,4.9,98,ACTIVE,Y
+25,SUP-025,Seasonal Decor Ltd,Mexico,1,4.2,85,ACTIVE,N
+26,SUP-026,Premium Electronics Plus,USA,3,4.9,99,ACTIVE,Y
+27,SUP-027,Apparel Direct Co,Vietnam,1,4.4,90,ACTIVE,Y
+28,SUP-028,Home Goods Warehouse,China,2,4.5,91,ACTIVE,Y
+29,SUP-029,Sporting Goods Inc,Canada,1,4.6,93,ACTIVE,Y
+30,SUP-030,Toys & Games Dist,China,1,4.2,84,ACTIVE,N
+31,SUP-031,Health Care Products,USA,3,4.8,97,ACTIVE,Y
+32,SUP-032,Grocery Supply Chain,USA,3,4.9,99,ACTIVE,Y
+33,SUP-033,Seasonal Items Wholesale,India,1,4.1,82,ACTIVE,N
+34,SUP-034,Tech Solutions Global,Taiwan,1,4.7,95,ACTIVE,Y
+35,SUP-035,General Merchandise Ltd,Germany,3,4.8,96,ACTIVE,Y

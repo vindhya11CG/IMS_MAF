@@ -1,6 +1,7 @@
 """Logging setup for the Inventory Management System."""
 
 import logging
+from pathlib import Path
 from typing import Optional
 
 
@@ -34,7 +35,9 @@ def setup_logging(
     
     # File handler if specified
     if log_file:
-        file_handler = logging.FileHandler(log_file)
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(log_path)
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
     

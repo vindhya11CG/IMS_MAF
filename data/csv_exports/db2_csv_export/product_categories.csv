@@ -1,0 +1,9 @@
+category_id,category_code,category_name,avg_retail_price,shelf_life_days,temperature_controlled,hazmat_flag,typical_velocity
+1,ELEC,Electronics,549.99,null,0,1,A
+2,APPR,Apparel,34.99,null,0,0,B
+3,HOME,Home Goods,89.99,null,0,0,B
+4,SPOR,Sporting Goods,74.99,null,0,1,A
+5,TOYS,Toys,39.99,null,0,0,A
+6,HEAL,Health & Beauty,21.99,45,0,0,B
+7,GROC,Grocery,8.99,14,1,0,A
+8,SEAS,Seasonal,64.99,null,0,0,B

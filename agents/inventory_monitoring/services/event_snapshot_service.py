@@ -128,21 +128,21 @@ class EventSnapshotService:
                 raise ValueError(f"Missing required field: {field} at index {index}")
         
         try:
-            snapshot_id = raw_snapshot.get("snapshot_id", "").strip()
-            if not snapshot_id:
-                raise ValueError("snapshot_id cannot be empty")
+            snapshot_id = parse_int(raw_snapshot.get("snapshot_id"), 0)
+            if snapshot_id == 0:
+                raise ValueError("snapshot_id cannot be empty or invalid")
             
-            snapshot_date = raw_snapshot.get("snapshot_date", "").strip()
+            snapshot_date = str(raw_snapshot.get("snapshot_date", "")).strip()
             if not snapshot_date:
                 raise ValueError("snapshot_date cannot be empty")
             
-            sku_id = raw_snapshot.get("sku_id") or raw_snapshot.get("product_id", "")
-            if not sku_id:
-                raise ValueError("sku_id/product_id not found")
+            sku_id = parse_int(raw_snapshot.get("sku_id") or raw_snapshot.get("product_id"), 0)
+            if sku_id == 0:
+                raise ValueError("sku_id/product_id cannot be empty or invalid")
             
-            location_id = raw_snapshot.get("location_id", "").strip()
-            if not location_id:
-                raise ValueError("location_id cannot be empty")
+            location_id = parse_int(raw_snapshot.get("location_id"), 0)
+            if location_id == 0:
+                raise ValueError("location_id cannot be empty or invalid")
             
             # Parse numeric fields with defaults
             opening_stock = parse_int(raw_snapshot.get("opening_stock"), 0)
@@ -163,8 +163,8 @@ class EventSnapshotService:
             snapshot = InventorySnapshot(
                 snapshot_id=snapshot_id,
                 snapshot_date=snapshot_date,
-                sku_id=str(sku_id),
-                location_id=str(location_id),
+                sku_id=sku_id,
+                location_id=location_id,
                 opening_stock=opening_stock,
                 receipts=receipts,
                 sales=sales,

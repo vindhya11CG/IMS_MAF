@@ -3,9 +3,18 @@
 from typing import Optional
 
 
-def parse_int(value: Optional[str], default: int = 0) -> int:
-    """Parse a string value to integer with fallback to default."""
+from numbers import Number
+
+def parse_int(value: Optional[str | int | float], default: int = 0) -> int:
+    """Parse a string or numeric value to integer with fallback to default."""
     if value is None:
+        return default
+    if isinstance(value, Number):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return default
+    if not isinstance(value, str):
         return default
     value = value.strip().replace("\ufeff", "")
     if value == "" or value.upper() in {"NULL", "NONE"}:
@@ -16,9 +25,16 @@ def parse_int(value: Optional[str], default: int = 0) -> int:
         return default
 
 
-def parse_optional_int(value: Optional[str]) -> Optional[int]:
-    """Parse a string value to optional integer."""
+def parse_optional_int(value: Optional[str | int | float]) -> Optional[int]:
+    """Parse a string or numeric value to optional integer."""
     if value is None:
+        return None
+    if isinstance(value, Number):
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(value, str):
         return None
     value = value.strip().replace("\ufeff", "")
     if value == "" or value.upper() in {"NULL", "NONE"}:

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 
+from agents.inventory_monitoring.models.inventory_models import InventoryPosition
 from .parsing import parse_int, parse_optional_int
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,13 @@ class CsvInventoryDataLoader:
 
     def __init__(self, root_dir: str | Path = "data/csv_exports") -> None:
         self.root_dir = Path(root_dir)
+        if not self.root_dir.exists():
+            alternate_root = self.root_dir.parent
+            if alternate_root.exists():
+                logger.warning(
+                    f"CSV root {self.root_dir} not found, falling back to {alternate_root}"
+                )
+                self.root_dir = alternate_root
 
     def _read_rows(self, file_path: Path) -> List[Dict[str, str]]:
         """Read CSV file and return list of dictionaries."""
@@ -49,22 +57,22 @@ class CsvInventoryDataLoader:
             logger.error(f"Error reading CSV file {file_path}: {e}")
             return []
 
-    def load_inventory_positions(self) -> List[Dict]:
+    def load_inventory_positions(self) -> List[InventoryPosition]:
         """Load inventory positions from CSV."""
         rows = self._read_rows(self.root_dir / "db3_csv_export" / "inventory_positions.csv")
-        positions = []
+        positions: List[InventoryPosition] = []
         for row in rows:
             try:
-                position = {
-                    "position_id": parse_int(row.get("position_id")),
-                    "sku_id": parse_int(row.get("sku_id") or row.get("product_id")),  # FIXED: was checking product_id twice
-                    "location_id": parse_int(row.get("location_id")),
-                    "on_hand_qty": parse_int(row.get("on_hand_qty")),
-                    "safety_stock_qty": parse_int(row.get("safety_stock_qty")),
-                    "reorder_point_qty": parse_int(row.get("reorder_point_qty")),
-                    "allocated_qty": parse_int(row.get("allocated_qty")),
-                    "last_counted_date": row.get("last_counted_date", "").strip() or None,
-                }
+                position = InventoryPosition(
+                    position_id=parse_int(row.get("position_id")),
+                    sku_id=parse_int(row.get("sku_id") or row.get("product_id")),
+                    location_id=parse_int(row.get("location_id")),
+                    on_hand_qty=parse_int(row.get("on_hand_qty")),
+                    safety_stock_qty=parse_int(row.get("safety_stock_qty")),
+                    reorder_point_qty=parse_int(row.get("reorder_point_qty")),
+                    allocated_qty=parse_int(row.get("allocated_qty")),
+                    last_counted_date=row.get("last_counted_date", "").strip() or None,
+                )
                 positions.append(position)
             except Exception as e:
                 logger.error(f"Error parsing inventory position row: {e}")
