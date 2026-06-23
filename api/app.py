@@ -6,6 +6,11 @@ from typing import Any, Dict
 from fastapi import FastAPI, HTTPException
 from starlette.concurrency import run_in_threadpool
 
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 from config import AzureOpenAIClient, AzureOpenAIConfig
 from utils.logging_setup import setup_logging
 from agents.inventory_monitoring.agent import InventoryMonitoringAgent
