@@ -4,6 +4,11 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
+
 try:
     from openai import AzureOpenAI
 except ImportError:  # pragma: no cover
@@ -17,7 +22,7 @@ class AzureOpenAIConfig:
     deployment: str
     api_version: str = "2025-04-01-preview"
     temperature: float = 0.2
-    max_tokens: int = 512
+    max_tokens: int = 512  # used as max_completion_tokens
 
     def validate(self) -> None:
         if not self.endpoint:
@@ -28,7 +33,7 @@ class AzureOpenAIConfig:
             raise ValueError("Azure OpenAI deployment name is required.")
 
     @classmethod
-    def from_env(cls) -> AzureOpenAIConfig:
+    def from_env(cls) -> "AzureOpenAIConfig":
         return cls(
             endpoint=os.getenv("AZURE_OPENAI_ENDPOINT", ""),
             api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
@@ -45,8 +50,10 @@ class AzureOpenAIClient:
             raise ImportError(
                 "openai package is required to use AzureOpenAIClient. Install with: pip install openai"
             )
+
         config.validate()
         self.config = config
+
         self.client = AzureOpenAI(
             api_key=config.api_key,
             api_version=config.api_version,
@@ -59,14 +66,31 @@ class AzureOpenAIClient:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
     ) -> str:
-        response = self.client.chat.completions.create(
-            model=self.config.deployment,
-            messages=messages,
-            temperature=temperature if temperature is not None else self.config.temperature,
-            max_tokens=max_tokens if max_tokens is not None else self.config.max_tokens,
+        """
+        Creates a chat completion using Azure OpenAI.
+        Uses 'max_completion_tokens' (new API standard).
+        """
+
+        # Prepare parameters safely
+        params: Dict[str, Any] = {
+            "model": self.config.deployment,
+            "messages": messages,
+            "temperature": (
+                temperature if temperature is not None else self.config.temperature
+            ),
+        }
+
+        # ✅ FIX: Use new parameter name
+        max_tokens_value = (
+            max_tokens if max_tokens is not None else self.config.max_tokens
         )
+        if max_tokens_value:
+            params["max_completion_tokens"] = max_tokens_value
+
+        response = self.client.chat.completions.create(**params)
+
         choice = response.choices[0]
-        return choice.message.content.strip()
+        return (choice.message.content or "").strip()
 
     def build_system_message(self) -> Dict[str, str]:
         return {
