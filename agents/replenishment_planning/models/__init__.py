@@ -1,7 +1,6 @@
-"""Replenishment Planning Agent package."""
+"""Models for Replenishment Planning Agent."""
 
-from .agent import ReplenishmentPlanningAgent
-from .models import (
+from .replenishment_models import (
     OrderRecommendation,
     ReplenishmentOrder,
     ReplenishmentPlanSummary,
@@ -9,9 +8,8 @@ from .models import (
 )
 
 __all__ = [
-    "ReplenishmentPlanningAgent",
-    "ReplenishmentOrder",
     "SupplierInfo",
+    "ReplenishmentOrder",
     "OrderRecommendation",
     "ReplenishmentPlanSummary",
 ]
