@@ -1,0 +1,23 @@
+{
+  "train_metrics": {
+    "MAE_pct": 3.43,
+    "RMSE_pct": 5.09,
+    "MAPE_pct": 4.28,
+    "R2_pct": 99.57,
+    "Accuracy_pct": 95.72
+  },
+  "val_metrics": {
+    "MAE_pct": 5.57,
+    "RMSE_pct": 8.4,
+    "MAPE_pct": 6.32,
+    "R2_pct": 98.89,
+    "Accuracy_pct": 93.68
+  },
+  "test_metrics": {
+    "MAE_pct": 8.5,
+    "RMSE_pct": 17.83,
+    "MAPE_pct": 8.64,
+    "R2_pct": 95.75,
+    "Accuracy_pct": 91.36
+  }
+}
