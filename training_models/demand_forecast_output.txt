@@ -1,0 +1,245 @@
+SCRIPT RUNS:
+(venv) PS C:\Users\vsreesam\Downloads\demand_forecasting_system> python 01_data_preparation.py
+
+======================================================================
+INVENTORY DEMAND FORECASTING - DATA PREPARATION
+======================================================================
+
+[LOAD] Reading CSV file...
+Loaded 91,250 records
+Date range: 2023-01-01 to 2023-12-31
+
+[EXPLORE] Data Structure:
+
+Shape: (91250, 26)
+
+Columns:
+['item_id', 'category', 'stock_level', 'reorder_point', 'reorder_frequency_days', 
+'lead_time_days', 'daily_demand', 'demand_std_dev', 'item_popularity_score', 
+'storage_location_id', 'zone', 'picking_time_seconds', 'handling_cost_per_unit', 
+'unit_price', 'holding_cost_per_unit_day', 'stockout_count_last_month', 
+'order_fulfillment_rate', 'total_orders_last_month', 'turnover_ratio', 
+'layout_efficiency_score', 'last_restock_date', 
+'forecasted_demand_next_7d', 'KPI_score', 'date', 'day_of_week', 'is_promotional']
+
+Data types:
+item_id object
+category object
+stock_level int64
+reorder_point int64
+reorder_frequency_days int64
+lead_time_days int64
+daily_demand int64
+demand_std_dev int64
+item_popularity_score float64
+storage_location_id object
+zone object
+picking_time_seconds int64
+handling_cost_per_unit float64
+unit_price float64
+holding_cost_per_unit_day float64
+stockout_count_last_month int64
+order_fulfillment_rate float64
+total_orders_last_month int64
+turnover_ratio float64
+layout_efficiency_score float64
+last_restock_date object
+forecasted_demand_next_7d int64
+KPI_score float64
+date object
+day_of_week int64
+is_promotional bool
+
+Missing values:
+item_id 0
+category 0
+stock_level 0
+reorder_point 0
+reorder_frequency_days 0
+lead_time_days 0
+daily_demand 0
+demand_std_dev 0
+item_popularity_score 0
+storage_location_id 0
+zone 0
+picking_time_seconds 0
+handling_cost_per_unit 0
+unit_price 0
+holding_cost_per_unit_day 0
+stockout_count_last_month 0
+order_fulfillment_rate 0
+total_orders_last_month 0
+turnover_ratio 0
+layout_efficiency_score 0
+last_restock_date 0
+forecasted_demand_next_7d 0
+KPI_score 0
+date 0
+day_of_week 0
+is_promotional 0
+
+Basic statistics:
+
+daily_demand:
+count 91250.000000
+mean 46.668405
+std 37.835113
+min 1.000000
+25% 21.000000
+50% 36.000000
+75% 61.000000
+max 449.000000
+
+stock_level:
+count 91250.000000
+mean 573.467836
+std 656.722442
+min 6.000000
+25% 231.000000
+50% 389.000000
+75% 646.000000
+max 11140.000000
+
+unit_price:
+count 91250.000000
+mean 92.495975
+std 126.806078
+min 3.592865
+25% 15.971545
+50% 44.583438
+75% 95.200587
+max 471.528495
+
+[CLEAN] Cleaning data...
+Removed 0 duplicate rows
+Data cleaned and validated
+
+[FEATURES] Engineering features...
+Created temporal, lag, rolling, and categorical features
+Total features now: 48
+
+[SPLIT] Creating train/val/test splits...
+
+Train: 63,874 records (70%)
+Date range: 2023-01-01 00:00:00 to 2023-09-13 00:00:00
+
+Validation: 13,687 records (15%)
+Date range: 2023-09-13 00:00:00 to 2023-11-07 00:00:00
+
+Test: 13,689 records (15%)
+Date range: 2023-11-07 00:00:00 to 2023-12-31 00:00:00
+
+======================================================================
+DATA SUMMARY
+======================================================================
+
+total_records........................... 91250
+date_range_start........................ 2023-01-01 00:00:00
+date_range_end.......................... 2023-12-31 00:00:00
+unique_items............................ 50
+unique_categories....................... 5
+unique_locations........................ 20
+avg_daily_demand........................ 46.67
+std_daily_demand........................ 37.84
+min_daily_demand........................ 1.00
+max_daily_demand........................ 449.00
+
+[SAVE] Saving processed datasets...
+All data saved to parquet format
+
+
+
+
+
+
+==================================================================
+
+
+
+
+
+
+(venv) PS C:\Users\vsreesam\Downloads\demand_forecasting_system> python 02_model_training.py                          
+======================================================================                             
+DEMAND FORECASTING MODEL TRAINING
+======================================================================
+
+[LOAD] Loading prepared data...
+✓ Train: 63874, Val: 13687, Test: 13689
+
+======================================================================
+MODEL TRAINING - HYBRID SARIMAX + XGBoost
+======================================================================
+
+[TRAIN] XGBoost Global Model...
+✓ XGBoost trained
+
+[TRAIN] Per-Item SARIMAX Models...
+  ✓ Item   1/20: ITM10000
+  ✓ Item   2/20: ITM10005
+  ✓ Item   3/20: ITM10037
+  ✓ Item   4/20: ITM10038
+  ✓ Item   5/20: ITM10039
+  ✓ Item   6/20: ITM10004
+  ✓ Item   7/20: ITM10040
+  ✓ Item   8/20: ITM10041
+  ✓ Item   9/20: ITM10036
+  ✓ Item  10/20: ITM10033
+  ✓ Item  11/20: ITM10007
+  ✓ Item  12/20: ITM10034
+  ✓ Item  13/20: ITM10035
+  ✓ Item  14/20: ITM10006
+  ✓ Item  15/20: ITM10045
+  ✓ Item  16/20: ITM10046
+  ✓ Item  17/20: ITM10001
+  ✓ Item  18/20: ITM10047
+  ✓ Item  19/20: ITM10048
+  ✓ Item  20/20: ITM10049
+✓ Fitted 20 item-level SARIMAX models
+
+[TRAIN METRICS] Calculating Training Performance...
+
+Training Metrics:
+  Train MAE:       3.43%
+  Train RMSE:      5.09%
+  Train MAPE:      4.28%
+  Train R²:        99.57%
+  Train Accuracy:  95.72%
+
+[VALIDATE] Evaluating on Validation Set...
+
+Validation Metrics:
+  MAE:        5.57%
+  RMSE:       8.40%
+  MAPE:       6.32%
+  R² Score:   98.89%
+  Accuracy:   93.68%
+
+======================================================================
+MODEL EVALUATION - TEST SET
+======================================================================
+
+Overall Test Metrics:
+  MAE:        8.50%
+  RMSE:       17.83%
+  MAPE:       8.64%
+  R² Score:   95.75%
+  Accuracy:   91.36%
+
+Top 10 Items - Performance:
+Item ID         Count    MAE        RMSE       MAPE      
+---------------------------------------------------------
+ITM10000        275            7.09      10.06     6.16
+ITM10001        274            9.79      12.75    17.93
+ITM10002        272           12.10      15.67    14.26
+ITM10003        274            3.68       5.41     3.44
+ITM10004        274            5.27       7.87     4.98
+ITM10005        273            5.92      11.52     4.87
+ITM10006        274            7.32      10.79     8.42
+ITM10007        273            8.12      11.23     7.51
+ITM10008        273           11.24      18.51     8.62
+ITM10009        275           11.62      17.30    12.12
+
+✓ Model saved to hybrid_model.pkl
+
+✓ Metrics saved to model_metrics.json
