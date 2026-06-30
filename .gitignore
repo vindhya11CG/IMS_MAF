@@ -1,0 +1,49 @@
+# Virtual environment
+venv/
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+*.dist-info/
+
+# VSCode
+.vscode/
+
+# Data files (large / generated)
+*.csv
+*.parquet
+*.pkl
+*.txt
+
+# Ignore ONLY specific JSON model artifacts
+training_models/model_metrics.json
+training_models/model_features.json
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter / temp
+.ipynb_checkpoints/
+
+# Test caches
+.pytest_cache/
+
+# Ignore binaries
+*.dll
+*.so
+
+# Keep important files
+!requirements.txt
+!README.md
