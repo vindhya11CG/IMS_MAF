@@ -1,10 +1,10 @@
-# Inventory Management System - Inventory Monitoring Agent ✅
+# Inventory Management System - Inventory Monitoring, Replenishment, and Supplier Selection Agents ✅
 
-**Status**: Phase 1-3 COMPLETE and READY FOR PRODUCTION
+**Status**: Phase 1-5 COMPLETE and READY FOR PRODUCTION
 
 ## Project Overview
 
-The **Inventory Monitoring Agent** is a sophisticated multi-agent system built with the Microsoft Agent Framework that provides real-time inventory risk assessment and monitoring. It processes 265,000+ inventory records across 53 locations (50 stores + 3 distribution centers) to detect supply chain risks and generate actionable recommendations.
+The full IMS workflow is implemented across Phases 1-5, with a complete inventory risk detection, replenishment planning, and supplier selection pipeline. It processes 265,000+ inventory records across 53 locations (50 stores + 3 distribution centers) to detect supply chain risks, plan replenishment, and recommend supplier selections.
 
 ### Key Features
 
@@ -39,7 +39,7 @@ The **Inventory Monitoring Agent** is a sophisticated multi-agent system built w
 
 ## The Inventory Monitoring Workflow
 
-Our system implements the official main workflow specification in 3 phases:
+Our system implements the official main workflow specification in 5 phases:
 
 ### Phase 1: Inventory Event Snapshots ✅
 **Service**: `EventSnapshotService`  
@@ -105,8 +105,8 @@ Our system processes data from 5 CSV export databases:
 |----------|---------|---------|-----------------|
 | DB1 | Store network (locations, stores, DCs, states) | 63 | ✅ Available |
 | DB2 | Product master (SKUs, categories, seasonality) | 5,000+ | ✅ Available |
-| DB3 | Inventory core (positions, in-transit) | ~265K | ✅ Phase 1-3 |
-| DB4 | Suppliers (pricing, performance, risk) | 35+ | ✅ Available |
+| DB3 | Inventory core (positions, in-transit) | ~265K | ✅ Phase 1-5 |
+| DB4 | Suppliers (pricing, performance, risk) | 35+ | ✅ Phase 1-5 |
 | DB5 | Operations (snapshots, events) | ~100K | ✅ Phase 1-3 |
 
 ### Coverage
@@ -114,6 +114,10 @@ Our system processes data from 5 CSV export databases:
 - **SKUs**: 5,000+
 - **Inventory Records**: 265,000+
 - **Timespan**: 4+ years of transaction history
+
+### Risk Scenario Note
+- If the current dataset contains no inventory positions that meet the risk thresholds, the workflow will complete successfully but may produce zero Phase 4/5 orders.
+- For validation and testing, a controlled risky dataset was induced in the existing CSV files without changing any schema. See [RISKY_DATASET_INDUCTION.md](RISKY_DATASET_INDUCTION.md).
 
 ---
 
@@ -207,8 +211,10 @@ python main.py
 1. **Phase 1**: Loads and validates 100,000+ inventory snapshots
 2. **Phase 2**: Calculates current stock for 265,000 positions
 3. **Phase 3**: Assesses risk using 3-part decision logic
-4. **Analysis**: (Optional) Sends top 10 risks to Azure OpenAI
-5. **Output**: Logs results and summary to console and file
+4. **Phase 4**: Generates replenishment orders for risky items
+5. **Phase 5**: Selects suppliers and applies procurement policy
+6. **Analysis**: (Optional) Sends top results to Azure OpenAI
+7. **Output**: Logs results and summary to console and file
 
 ### Output Files
 - `logs/inventory_monitoring.log` - Detailed execution log
@@ -305,16 +311,6 @@ class RiskAssessment:
 
 ## Future Phases (Not Yet Required)
 
-### Phase 4: Replenishment Planning Agent
-- Generate replenishment orders based on risk assessments
-- Calculate optimal order quantities (EOQ)
-- Integration point: Consumes `RiskAssessment` objects
-
-### Phase 5: Supplier Selection & Policy Agent
-- Evaluate supplier options
-- Apply procurement policies
-- Integration point: Consumes replenishment orders from Phase 4
-
 ### Phase 6: Notifications & Approval Dashboard
 - Alert stakeholders
 - Approval workflow
@@ -328,6 +324,7 @@ class RiskAssessment:
 - **[README.md](README.md)** - This file. Project overview and quick start
 - **[SDK_COMPATIBILITY_FIX.md](SDK_COMPATIBILITY_FIX.md)** - Azure SDK migration details
 - **[PROJECT_ANALYSIS.md](PROJECT_ANALYSIS.md)** - Analysis of business requirements (3 PDFs)
+- **[RISKY_DATASET_INDUCTION.md](RISKY_DATASET_INDUCTION.md)** - Why the risky scenario was induced in CSV data
 - **[main_workflow_doc.pdf](docs/main_workflow_doc.pdf)** - Official workflow specification
 - **[logs/inventory_monitoring.log](logs/inventory_monitoring.log)** - Execution logs
 
@@ -399,10 +396,3 @@ python main.py
 **Last Updated**: 2026-06-15  
 **Status**: ✅ Production Ready  
 **Version**: 1.0.0
-
----
-
-**Last Updated**: 2026-06-15  
-**Status**: Reorganization Complete ✅
-
-This will execute the inventory calculation and risk monitoring services locally. If Azure OpenAI is configured, it will also attempt an Azure chat completion with `gpt-5.4-mini`.

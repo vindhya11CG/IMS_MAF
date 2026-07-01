@@ -6,10 +6,12 @@ from .inventory_monitoring import (
     InventoryRiskMonitoringService,
 )
 from .replenishment_planning import ReplenishmentPlanningAgent
+from .supplier_selection import SupplierSelectionAgent
 
 __all__ = [
     "InventoryMonitoringAgent",
     "InventoryCalculationService",
     "InventoryRiskMonitoringService",
     "ReplenishmentPlanningAgent",
+    "SupplierSelectionAgent",
 ]

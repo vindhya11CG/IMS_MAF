@@ -24,7 +24,7 @@ def main() -> None:
     # Setup logging
     setup_logging(logging.INFO, log_file="logs/inventory_monitoring.log")
     logger.info("="*80)
-    logger.info("Starting Inventory Management System - Complete Workflow (Phases 1-4)")
+    logger.info("Starting Inventory Management System - Complete Workflow (Phases 1-5)")
     logger.info("="*80)
     
     if load_dotenv is not None:
@@ -42,11 +42,11 @@ def main() -> None:
         logger.warning(f"Azure OpenAI configuration warning: {error}")
 
     # Execute complete workflow with orchestrator
-    orchestrator = AgentOrchestrator(openai_client=openai_client)
+    orchestrator = AgentOrchestrator(openai_client=openai_client, supplier_policy="STANDARD")
     result = orchestrator.execute()
 
     print("\n" + "="*100)
-    print("INVENTORY MANAGEMENT SYSTEM - COMPLETE WORKFLOW RESULTS")
+    print("INVENTORY MANAGEMENT SYSTEM - COMPLETE WORKFLOW RESULTS (PHASES 1-5)")
     print("="*100)
     print(result["summary"])
     
@@ -85,6 +85,35 @@ def main() -> None:
             print("PHASE 4: AZURE OPENAI ANALYSIS")
             print("="*100)
             print(replenishment_results["azure_analysis"])
+    
+    # Phase 5 Summary
+    supplier_results = result.get("phase_5_results", {})
+    if supplier_results.get("summary"):
+        sel_summary = supplier_results["summary"]
+        print("\n" + "="*100)
+        print("PHASE 5: SUPPLIER SELECTION SUMMARY")
+        print("="*100)
+        print(f"Orders Processed: {sel_summary.total_orders_evaluated}")
+        print(f"Supplier Selections Made: {sel_summary.total_orders_selected}")
+        print(f"Total Procurement Cost: ${sel_summary.total_procurement_cost:.2f}")
+        print(f"Policy Compliant Orders: {sel_summary.policy_compliant_orders}")
+        print(f"Orders Requiring Approval: {sel_summary.orders_requiring_approval}")
+        print(f"Supplier Diversity: {sel_summary.supplier_diversity} suppliers")
+        print(f"Cost Savings vs Initial: ${sel_summary.cost_savings_vs_initial:.2f}")
+        print(f"Average Lead Time: {sel_summary.average_lead_time:.1f} days")
+        
+        if sel_summary.exceptions:
+            print(f"\nPOLICY EXCEPTIONS ({len(sel_summary.exceptions)} orders):")
+            for exc in sel_summary.exceptions[:5]:
+                print(f"  - Order {exc['order_id']}: {exc['reason']}")
+            if len(sel_summary.exceptions) > 5:
+                print(f"  - ... and {len(sel_summary.exceptions) - 5} more")
+        
+        if supplier_results.get("azure_analysis"):
+            print("\n" + "="*100)
+            print("PHASE 5: AZURE OPENAI ANALYSIS")
+            print("="*100)
+            print(supplier_results["azure_analysis"])
     
     logger.info("Complete workflow execution finished")
 

@@ -72,7 +72,7 @@ class ReplenishmentPlanningAgent:
             for assessment in risky_items:
                 supplier = self.supplier_matching_service.execute(
                     assessment.sku_id,
-                    min_order_qty=1,
+                    order_qty=1,
                 )
                 if supplier:
                     suppliers[assessment.sku_id] = supplier
