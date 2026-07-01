@@ -6,8 +6,11 @@ from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
+
 # Load environment variables from .env
-load_dotenv()
+load_dotenv(override=True)
+
+
 
 try:
     from openai import AzureOpenAI

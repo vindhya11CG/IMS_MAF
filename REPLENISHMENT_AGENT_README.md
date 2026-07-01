@@ -67,17 +67,18 @@ Score = (Cost Factor × 0.5) + (Reliability Score × 0.4) + (Lead Time Factor ×
 
 **AgentOrchestrator**:
 - Coordinates all agents in the IMS workflow
-- Executes Phases 1-4 in sequence:
+- Executes Phases 1-5 in sequence:
   1. **Phase 1-3**: InventoryMonitoringAgent (snapshots → calculation → risk)
   2. **Phase 4**: ReplenishmentPlanningAgent (risk → orders)
+  3. **Phase 5**: SupplierSelectionAgent (orders → supplier selection)
 - Consolidates results and generates workflow summary
-- Ready for future phases (5-6: Supplier Selection & Notifications)
+- Phase 5 is now integrated; Phase 6 remains future
 
 #### 5. **Updated Main Entry Point** (`main.py`)
 
 - Uses `AgentOrchestrator` instead of single agent
-- Executes complete workflow (all 4 phases)
-- Displays results from both phases
+- Executes complete workflow (all 5 phases)
+- Displays results from all phases
 - Shows order breakdown by priority, costs, and lead times
 
 ---
@@ -85,7 +86,7 @@ Score = (Cost Factor × 0.5) + (Reliability Score × 0.4) + (Lead Time Factor ×
 ## Architecture
 
 ```
-WORKFLOW: Phases 1 → 2 → 3 → 4
+WORKFLOW: Phases 1 → 2 → 3 → 4 → 5
 
 Inventory Daily Snapshots → [Phase 1: EventSnapshotService]
                               ↓
@@ -103,7 +104,13 @@ In-Transit Inventory ——→ [Phase 3: InventoryRiskMonitoringService]
                     │
                     └─ ReplenishmentOrders
                               ↓
-                        (Future Phase 5: Supplier Selection)
+                        [Phase 5: SupplierSelectionAgent]
+                              ↓
+                    ┌─ PolicyEvaluationService (Policy Compliance)
+                    │
+                    ├─ SupplierEvaluationService (Performance & Risk)
+                    │
+                    └─ SupplierSelectionResults
                               ↓
                         (Future Phase 6: Approval & Notifications)
 ```
@@ -228,12 +235,6 @@ AZURE_OPENAI_API_VERSION=2025-04-01-preview
 
 ## Future Phases (Ready for Development)
 
-### Phase 5: Supplier Selection & Policy Agent
-- Apply procurement policies
-- Evaluate multiple suppliers
-- Consider budget constraints
-- **Integration**: Consumes `ReplenishmentOrder` from Phase 4
-
 ### Phase 6: Notifications & Approval Dashboard
 - Alert procurement team
 - Approval workflows
@@ -246,7 +247,7 @@ AZURE_OPENAI_API_VERSION=2025-04-01-preview
 ## Testing & Validation
 
 ✅ **Complete Workflow Test**: PASSED
-- All 4 phases execute end-to-end
+- All 5 phases execute end-to-end
 - No runtime errors
 - Data flows correctly between phases
 - Logging is comprehensive

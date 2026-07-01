@@ -7,6 +7,7 @@ from typing import Optional
 
 from agents.inventory_monitoring import InventoryMonitoringAgent
 from agents.replenishment_planning import ReplenishmentPlanningAgent
+from agents.supplier_selection import SupplierSelectionAgent
 from config import AzureOpenAIClient, AzureOpenAIConfig
 
 logger = logging.getLogger(__name__)
@@ -19,15 +20,18 @@ class AgentOrchestrator:
     Workflow:
     - Phase 1-3: InventoryMonitoringAgent (Inventory Event Snapshots → Calculation → Risk Monitoring)
     - Phase 4: ReplenishmentPlanningAgent (Consumes risk assessments → Generates orders)
+    - Phase 5: SupplierSelectionAgent (Consumes replenishment orders → Selects suppliers)
     
-    Future phases (5-6) will be added here as they're developed.
+    Future phases (6+) will be added here as they're developed.
     """
 
     def __init__(
         self,
         inventory_monitoring_agent: Optional[InventoryMonitoringAgent] = None,
         replenishment_planning_agent: Optional[ReplenishmentPlanningAgent] = None,
+        supplier_selection_agent: Optional[SupplierSelectionAgent] = None,
         openai_client: Optional[AzureOpenAIClient] = None,
+        supplier_policy: str = "STANDARD",
     ) -> None:
         self.inventory_agent = inventory_monitoring_agent or InventoryMonitoringAgent(
             openai_client=openai_client
@@ -35,18 +39,22 @@ class AgentOrchestrator:
         self.replenishment_agent = replenishment_planning_agent or ReplenishmentPlanningAgent(
             openai_client=openai_client
         )
+        self.supplier_selection_agent = (
+            supplier_selection_agent
+            or SupplierSelectionAgent(openai_client=openai_client, policy_name=supplier_policy)
+        )
         logger.info("AgentOrchestrator initialized")
 
     def execute(self) -> dict[str, object]:
         """
-        Execute the complete workflow: Phases 1-4.
+        Execute the complete workflow: Phases 1-5.
         
         Returns:
             Dictionary with results from all phases
         """
         try:
             logger.info("="*100)
-            logger.info("AGENT ORCHESTRATOR - STARTING COMPLETE IMS WORKFLOW (PHASES 1-4)")
+            logger.info("AGENT ORCHESTRATOR - STARTING COMPLETE IMS WORKFLOW (PHASES 1-5)")
             logger.info("="*100)
             
             # Phase 1-3: Inventory Monitoring
@@ -63,18 +71,27 @@ class AgentOrchestrator:
             orders = replenishment_results.get("orders", [])
             logger.info(f"  Completed: Generated {len(orders)} replenishment orders")
             
+            # Phase 5: Supplier Selection
+            logger.info("\n[PHASE 5] Executing Supplier Selection Agent...")
+            supplier_results = self.supplier_selection_agent.execute(orders)
+            
+            selections = supplier_results.get("selections", [])
+            logger.info(f"  Completed: Made {len(selections)} supplier selections")
+            
             logger.info("\n" + "="*100)
             logger.info("AGENT ORCHESTRATOR - COMPLETE IMS WORKFLOW FINISHED")
             logger.info("="*100)
             
             return {
                 "workflow_status": "COMPLETE",
-                "phases_executed": [1, 2, 3, 4],
+                "phases_executed": [1, 2, 3, 4, 5],
                 "phase_1_3_results": inventory_results,
                 "phase_4_results": replenishment_results,
+                "phase_5_results": supplier_results,
                 "summary": self._build_workflow_summary(
                     inventory_results,
                     replenishment_results,
+                    supplier_results,
                 ),
             }
         except Exception as e:
@@ -85,6 +102,7 @@ class AgentOrchestrator:
         self,
         inventory_results: dict,
         replenishment_results: dict,
+        supplier_results: dict,
     ) -> str:
         """Build summary of entire workflow."""
         lines = [
@@ -98,6 +116,9 @@ class AgentOrchestrator:
             "PHASE 4: REPLENISHMENT PLANNING AGENT",
             f"  - Replenishment Orders: {len(replenishment_results.get('orders', []))}",
             f"  - Risky Items Processed: {replenishment_results.get('risky_items_processed', 0)}",
+            "",
+            "PHASE 5: SUPPLIER SELECTION AGENT",
+            f"  - Orders with Supplier Selected: {len(supplier_results.get('selections', []))}",
         ]
         
         if replenishment_results.get("summary"):
@@ -106,8 +127,19 @@ class AgentOrchestrator:
                 f"  - Total Order Cost: ${summary.total_order_cost:.2f}",
                 f"  - Urgent Orders: {summary.orders_by_priority.get('URGENT', 0)}",
                 f"  - High Priority: {summary.orders_by_priority.get('HIGH', 0)}",
-                f"  - Avg Lead Time: {summary.average_lead_time:.1f} days",
+            ])
+        
+        if supplier_results.get("summary"):
+            sel_summary = supplier_results["summary"]
+            lines.extend([
+                "",
+                f"  - Total Procurement Cost: ${sel_summary.total_procurement_cost:.2f}",
+                f"  - Policy Compliant: {sel_summary.policy_compliant_orders}",
+                f"  - Requiring Approval: {sel_summary.orders_requiring_approval}",
+                f"  - Supplier Diversity: {sel_summary.supplier_diversity} suppliers",
+                f"  - Cost Savings: ${sel_summary.cost_savings_vs_initial:.2f}",
             ])
         
         lines.append("="*80)
         return "\n".join(lines)
+

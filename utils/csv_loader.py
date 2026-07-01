@@ -374,18 +374,38 @@ class CsvInventoryDataLoader:
         for row in rows:
             try:
                 tier = {
-                    "pricing_tier_id": parse_int(row.get("pricing_tier_id")),
+                    "pricing_tier_id": parse_int(row.get("pricing_tier_id") or row.get("tier_id")),
                     "supplier_id": parse_int(row.get("supplier_id")),
-                    "sku_id": parse_int(row.get("sku_id") or row.get("product_id")),
-                    "min_qty": parse_int(row.get("min_qty")),
-                    "max_qty": parse_int(row.get("max_qty")),
-                    "unit_price": float(row.get("unit_price", 0) or 0),
+                    "category_id": parse_int(row.get("category_id")),
+                    "min_qty": parse_int(row.get("min_qty") or row.get("min_quantity")),
+                    "max_qty": parse_int(row.get("max_qty") or row.get("max_quantity")),
+                    "discount_percent": float(row.get("discount_percent", 0) or 0),
                 }
                 tiers.append(tier)
             except Exception as e:
                 logger.error(f"Error parsing supplier pricing tier row: {e}")
                 continue
         return tiers
+
+    def load_supplier_category_mapping(self) -> List[Dict]:
+        """Load supplier category mapping and baseline cost data."""
+        rows = self._read_rows(self.root_dir / "db4_csv_export" / "supplier_category_mapping.csv")
+        mappings = []
+        for row in rows:
+            try:
+                mapping = {
+                    "mapping_id": parse_int(row.get("mapping_id")),
+                    "supplier_id": parse_int(row.get("supplier_id")),
+                    "category_id": parse_int(row.get("category_id")),
+                    "lead_time_days": parse_int(row.get("lead_time_days")),
+                    "moq_units": parse_int(row.get("moq_units")),
+                    "unit_cost": float(row.get("unit_cost", 0) or 0),
+                }
+                mappings.append(mapping)
+            except Exception as e:
+                logger.error(f"Error parsing supplier category mapping row: {e}")
+                continue
+        return mappings
 
     def load_supplier_risk_profile(self) -> List[Dict]:
         """Load supplier risk profiles for supplier evaluation."""

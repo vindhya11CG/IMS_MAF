@@ -20,6 +20,8 @@ class SupplierMatchingService(ReplenishmentService):
         self.loader = loader or CsvInventoryDataLoader()
         self.suppliers: Dict[int, Dict] = {}  # supplier_id -> supplier data
         self.pricing_tiers: List[Dict] = []
+        self.category_mappings: List[Dict] = []
+        self.product_categories: Dict[int, int] = {}
         self.performance_metrics: Dict[int, Dict] = {}  # supplier_id -> metrics
         self._load_all_data()
 
@@ -37,6 +39,19 @@ class SupplierMatchingService(ReplenishmentService):
             # Load pricing tiers
             self.pricing_tiers = self.loader.load_supplier_pricing_tiers()
             logger.info(f"Loaded {len(self.pricing_tiers)} pricing tiers")
+
+            # Load category-based supplier mappings
+            self.category_mappings = self.loader.load_supplier_category_mapping()
+            logger.info(f"Loaded {len(self.category_mappings)} supplier category mappings")
+
+            # Load product category map for SKU -> category lookups
+            products = self.loader.load_products()
+            self.product_categories = {
+                product.get("sku_id"): product.get("category_id")
+                for product in products
+                if product.get("sku_id") is not None
+            }
+            logger.info(f"Loaded category mapping for {len(self.product_categories)} SKUs")
             
             # Load performance metrics
             metrics = self.loader.load_supplier_performance_metrics()
@@ -49,29 +64,40 @@ class SupplierMatchingService(ReplenishmentService):
             logger.error(f"Error loading supplier data: {e}")
 
     def _get_unit_cost(self, supplier_id: int, sku_id: int, order_qty: int) -> float:
-        """Get unit cost for a supplier-SKU pair based on order quantity (pricing tiers)."""
+        """Get unit cost for a supplier-SKU pair based on category pricing tiers."""
+        category_id = self.product_categories.get(sku_id)
+        if category_id is None:
+            logger.warning(f"No category found for SKU {sku_id}")
+            return 0.0
+
+        # Find supplier category mapping row
+        mapping_rows = [
+            m for m in self.category_mappings
+            if m.get("supplier_id") == supplier_id and m.get("category_id") == category_id
+        ]
+        if not mapping_rows:
+            logger.warning(f"No category mapping found for supplier {supplier_id} and category {category_id}")
+            return 0.0
+
+        base_cost = float(mapping_rows[0].get("unit_cost", 0) or 0)
+        if base_cost <= 0:
+            return 0.0
+
+        # Find applicable discount tier by category
         matching_tiers = [
             t for t in self.pricing_tiers
             if t.get("supplier_id") == supplier_id
-            and t.get("sku_id") == sku_id
+            and t.get("category_id") == category_id
             and t.get("min_qty", 0) <= order_qty
             and (t.get("max_qty", float("inf")) >= order_qty or t.get("max_qty") == 0)
         ]
-        
+
         if matching_tiers:
-            # Return price from best matching tier (closest min_qty)
             best_tier = max(matching_tiers, key=lambda t: t.get("min_qty", 0))
-            return float(best_tier.get("unit_price", 0))
-        
-        # Fallback to default pricing tier if no exact match
-        default_tiers = [
-            t for t in self.pricing_tiers
-            if t.get("supplier_id") == supplier_id and t.get("sku_id") == sku_id
-        ]
-        if default_tiers:
-            return float(default_tiers[0].get("unit_price", 0))
-        
-        return 0.0
+            discount_percent = float(best_tier.get("discount_percent", 0) or 0)
+            return max(0.0, base_cost * (1.0 - discount_percent / 100.0))
+
+        return base_cost
 
     def _get_reliability_score(self, supplier_id: int) -> float:
         """Calculate reliability score based on performance metrics."""
@@ -99,14 +125,21 @@ class SupplierMatchingService(ReplenishmentService):
         Returns:
             Best SupplierInfo or None if no supplier found
         """
-        # Find all suppliers that offer this SKU
+        category_id = self.product_categories.get(sku_id)
+        if category_id is None:
+            logger.warning(f"No category mapping found for SKU {sku_id}")
+            return None
+
+        # Find all suppliers that offer this SKU category
         candidates = [
-            (sid, s) for sid, s in self.suppliers.items()
-            if any(t.get("sku_id") == sku_id for t in self.pricing_tiers if t.get("supplier_id") == sid)
+            (mapping["supplier_id"], self.suppliers.get(mapping["supplier_id"]))
+            for mapping in self.category_mappings
+            if mapping.get("category_id") == category_id
+            and self.suppliers.get(mapping.get("supplier_id")) is not None
         ]
         
         if not candidates:
-            logger.warning(f"No suppliers found for SKU {sku_id}")
+            logger.warning(f"No suppliers found for SKU {sku_id} (category {category_id})")
             return None
 
         # Score each supplier
