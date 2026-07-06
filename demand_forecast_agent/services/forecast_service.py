@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 
 from .model_loader_service import (
@@ -15,56 +14,62 @@ class ForecastService:
         )
 
     def execute(
+
         self,
-        item_id,
-        horizon_days,
-        location=None
+
+        payload,
+
+        horizon
+
     ):
 
-        data = pd.read_parquet(
-            os.getenv(
-                "DATA_PATH"
-            )
-        )
+        try:
 
-        data = (
-            data
-            .sort_values(
-                "date"
+            df = pd.DataFrame(
+                [payload]
             )
-        )
 
-        subset = (
-            data[
-                data["item_id"]
-                == item_id
-            ]
-            .tail(
-                horizon_days
+            prediction = (
+
+                self.model.forecast(
+
+                    df,
+
+                    steps_ahead=horizon,
+
+                    item_id=str(
+                        payload[
+                            "product_id"
+                        ]
+                    )
+
+                )
+
             )
-        )
 
-        if subset.empty:
             return {
-                "status": "NO_ITEM_FOUND",
-                "message": f"No data found for item_id: {item_id}",
-                "forecast": None
+
+                "status":
+                "SUCCESS",
+
+                "forecast":
+                round(
+                    float(
+                        prediction.mean()
+                    ),
+                    2
+                )
+
             }
 
-        prediction = (
-            self.model.forecast(
-                subset,
-                steps_ahead=horizon_days,
-                item_id=item_id
-            )
-        )
+        except Exception as e:
 
-        return {
-            "status": "SUCCESS",
-            "forecast": round(
-                float(
-                    prediction.mean()
-                ),
-                2
-            )
-}
+            return {
+
+                "status":
+                "FORECAST_FAILED",
+
+                "message":
+                str(e)
+
+            }

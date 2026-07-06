@@ -1,49 +1,56 @@
-# Virtual environment
-venv/
-.env
-
 # Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Build / packaging
-build/
-dist/
-*.egg-info/
-*.dist-info/
+# Virtual environment
+venv/
+.env/
 
-# VSCode
+# VS Code settings
 .vscode/
 
-# Data files (large / generated)
-*.csv
-*.parquet
-*.pkl
-*.txt
-
-# Ignore ONLY specific JSON model artifacts
-training_models/model_metrics.json
-training_models/model_features.json
-
-# Logs
-*.log
+# Environment variables
+.env
+.env.*
 
 # OS files
 .DS_Store
 Thumbs.db
 
-# Jupyter / temp
+# Logs and temp files
+*.log
+*.tmp
+
+# Documentation build (if any)
+docs/_build/
+
+# Jupyter notebooks checkpoints
 .ipynb_checkpoints/
 
-# Test caches
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Testing
 .pytest_cache/
+coverage/
 
-# Ignore binaries
-*.dll
-*.so
+# Local configs
+*.local
 
-# Keep important files
-!requirements.txt
-!README.md
+# Database files
+*.sqlite3
+
+# Model artifacts
+*.pkl
+*.parquet
+
+# Synthetic datasets
+synthetic_inventory*.csv
+
+# Ignore specific generated JSON files
+training_models/model_features.json
+training_models/model_metrics.json

@@ -1,0 +1,4 @@
+season_id,season_name,start_month,end_month,demand_multiplier,description
+1,Regular,1,8,1.0,Standard baseline demand period
+2,Back-to-School,9,9,1.8,Elevated demand Sept for apparel/stationery
+3,Holiday,10,12,2.5,Peak demand for toys/electronics/gifts

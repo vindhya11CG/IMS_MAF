@@ -1,18 +1,42 @@
+import json
 import datetime
+
 
 class LoggingService:
 
     def execute(
+
         self,
+
         payload
+
     ):
 
-        print("\n========== LOG ==========")
+        ts = (
 
-        print(
-            datetime.datetime.now()
+            datetime
+            .datetime
+            .now()
+            .isoformat()
+
         )
 
-        print(payload)
+        print("\n===== FORECAST LOG =====")
 
-        print("=========================\n")
+        print(ts)
+
+        print(
+
+            json.dumps(
+
+                payload,
+
+                indent=2,
+
+                default=str
+
+            )
+
+        )
+
+        print("========================")

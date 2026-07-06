@@ -8,16 +8,29 @@ from demand_forecast_agent.services.demand_forecast_workflow_service import (
 class DemandForecastAgent:
 
     def execute(
+
         self,
-        item_id,
+
+        payload,
+
         horizon=14
+
     ):
 
-        return asyncio.run(
+        return (
 
-            DemandForecastWorkflow()
-            .run(
-                item_id,
-                horizon
+            asyncio.run(
+
+                DemandForecastWorkflow()
+
+                .run(
+
+                    payload,
+
+                    horizon
+
+                )
+
             )
+
         )

@@ -1,6 +1,6 @@
 import os
-import traceback
 import sys
+import traceback
 from pathlib import Path
 import pandas as pd
 
@@ -15,61 +15,86 @@ import training_models.model_training
 sys.modules["__main__"] = training_models.model_training
 
 
+from demand_forecast_agent.agent import (
+    DemandForecastAgent
+)
+
 from demand_forecast_agent.services.model_loader_service import (
     ModelLoaderService
 )
 
-from demand_forecast_agent.services.forecast_service import (
-    ForecastService
-)
-
-from demand_forecast_agent.services.confidence_service import (
-    ConfidenceService
-)
-
-from demand_forecast_agent.services.output_formatter_service import (
-    OutputFormatterService
-)
-
-from demand_forecast_agent.services.inventory_decision_service import (
-    InventoryDecisionService
-)
-
-from demand_forecast_agent.services.reorder_service import (
-    ReorderService
-)
-
-from demand_forecast_agent.services.logging_service import (
-    LoggingService
-)
-
-from demand_forecast_agent.services.feature_engineering_service import (
-    FeatureEngineeringService
-)
-
 
 # -------------------------
-# MOCK EXPLANATION
+# LOAD INVENTORY STATE
 # -------------------------
 
-class MockExplanationService:
+def load_inventory_payload(
+    product_id
+):
 
-    def execute(
-        self,
-        sku,
-        forecast,
-        confidence
-    ):
+    inventory = pd.read_csv(
 
-        return f"""
-Local test completed.
+        ROOT
+        /
+        "csv_exports"
+        /
+        "db3_csv_export"
+        /
+        "inventory_positions.csv"
 
-SKU: {sku}
-Forecast: {round(forecast,2)}
-Confidence: {confidence}%
+    )
 
-(No Azure explanation)
-"""
+    row = inventory[
+        inventory["product_id"]
+        ==
+        product_id
+    ]
+
+    if row.empty:
+
+        return None
+
+    row = row.iloc[0]
+
+    return {
+
+        "product_id":
+
+        int(
+            row["product_id"]
+        ),
+
+        "location_id":
+
+        int(
+            row["location_id"]
+        ),
+
+        "on_hand_qty":
+
+        float(
+            row["on_hand_qty"]
+        ),
+
+        "safety_stock_qty":
+
+        float(
+            row["safety_stock_qty"]
+        ),
+
+        "reorder_point_qty":
+
+        float(
+            row["reorder_point_qty"]
+        ),
+
+        "allocated_qty":
+
+        float(
+            row["allocated_qty"]
+        )
+
+    }
 
 
 # -------------------------
@@ -83,17 +108,11 @@ def run_test():
     try:
 
         print("MODEL_PATH:")
-        print(os.getenv("MODEL_PATH"))
-
-        print("\nDATA_PATH:")
-        print(os.getenv("DATA_PATH"))
-
-        print("\nMETRICS_PATH:")
-        print(os.getenv("METRICS_PATH"))
-
-        # --------------------------------
-        # LOAD MODEL
-        # --------------------------------
+        print(
+            os.getenv(
+                "MODEL_PATH"
+            )
+        )
 
         print("\n[1] Loading model...")
 
@@ -102,275 +121,133 @@ def run_test():
             .load()
         )
 
-        print("\nPASS Model loaded")
+        print(
+            "\nPASS Model loaded"
+        )
 
-        print("\n===== MODEL DETAILS =====")
+        print("\n===== MODEL =====")
 
-        print("Model Type:")
-        print(type(model))
+        print(
+            type(model)
+        )
 
-        print("\nWeights:")
-        print("SARIMAX:", model.sarimax_weight)
-        print("XGBoost:", model.xgboost_weight)
+        print(
+            "\nSARIMAX Weight:",
+            model.sarimax_weight
+        )
 
-        # --------------------------------
-        # FEATURES
-        # --------------------------------
+        print(
+            "XGBoost Weight:",
+            model.xgboost_weight
+        )
 
         features = getattr(
+
             model.xgboost_model,
+
             "feature_cols",
+
             []
-        )
 
-        print("\n===== MODEL FEATURES =====")
+        )
 
         print(
-            f"Total Features: {len(features)}"
+            "\nFeatures:",
+            len(features)
         )
 
-        for i, f in enumerate(
-            features,
-            start=1
-        ):
-            print(f"{i}. {f}")
+        product_id = int(
 
-        # --------------------------------
-        # SARIMAX
-        # --------------------------------
-
-        print("\n===== SARIMAX DETAILS =====")
-
-        print(
-            "Loaded Models:",
-            len(
-                model.sarimax_models
-            )
-        )
-
-        if model.sarimax_models:
-
-            print(
-                "\nSample Items:"
+            input(
+                "\nEnter Product ID: "
             )
 
-            for item in (
-                list(
-                    model
-                    .sarimax_models
-                    .keys()
-                )[:10]
-            ):
-                print("-", item)
-
-        # --------------------------------
-        # METRICS
-        # --------------------------------
-
-        print(
-            "\n===== TRAINING METRICS ====="
-        )
-
-        for phase, vals in (
-            model.metrics.items()
-        ):
-
-            print(
-                f"\n{phase.upper()}"
-            )
-
-            for k, v in (
-                vals.items()
-            ):
-                print(
-                    f"{k}: {v}"
-                )
-
-        # --------------------------------
-        # USER INPUT
-        # --------------------------------
-
-        item = input(
-            "\nEnter item_id: "
         )
 
         horizon = int(
-            input(
-                "Forecast horizon: "
-            )
-        )
 
-        stock_level = float(
             input(
-                "Current stock level: "
+                "Enter Forecast Horizon: "
             )
-        )
 
-        # --------------------------------
-        # FORECAST
-        # --------------------------------
+        )
 
         print(
-            "\n[2] Forecasting..."
+            "\n[2] Fetching inventory state..."
         )
 
-        response = (
-            ForecastService()
-            .execute(
-                item,
-                horizon
+        payload = (
+
+            load_inventory_payload(
+                product_id
             )
+
         )
-        if response["status"] == "NO_ITEM_FOUND":
-            print("\n========== RESULT ==========\n")
-            print(response["message"])
+
+        if payload is None:
+
             print(
-                "\nPASS END-TO-END SUCCESS"
+                "\nNO PRODUCT FOUND"
             )
+
+            print(
+                f"product_id={product_id}"
+            )
+
             return
-        forecast = response["forecast"]
-        print(
-            f"PASS Forecast = {forecast}"
-        )
-
-        # --------------------------------
-        # CONFIDENCE
-        # --------------------------------
 
         print(
-            "\n[3] Loading confidence..."
+            "\nInventory Loaded:"
         )
 
-        confidence = (
-            ConfidenceService()
-            .execute()
-        )
+        for k, v in payload.items():
 
-        print(
-            f"PASS Confidence = {confidence}%"
-        )
-
-        # --------------------------------
-        # INVENTORY
-        # --------------------------------
-
-        print(
-            "\n[4] Inventory Decision..."
-        )
-
-        decision = (
-            InventoryDecisionService()
-            .execute(
-                forecast,
-                stock_level
+            print(
+                f"{k}: {v}"
             )
-        )
-
-        reorder = (
-            ReorderService()
-            .calculate_reorder(
-                forecast,
-                stock_level
-            )
-        )
 
         print(
-            "Decision:",
-            decision
-        )
-
-        print(
-            "Reorder Qty:",
-            reorder
-        )
-
-        # --------------------------------
-        # LOGGING
-        # --------------------------------
-
-        print(
-            "\n[5] Logging..."
-        )
-
-        LoggingService.execute(
-            {
-                "item_id": item,
-                "stock_level": stock_level
-            },
-            forecast
-        )
-
-        # --------------------------------
-        # EXPLANATION
-        # --------------------------------
-
-        print(
-            "\n[6] Explanation..."
-        )
-
-        explanation = (
-            MockExplanationService()
-            .execute(
-                item,
-                forecast,
-                confidence
-            )
-        )
-
-        print(
-            "PASS Explanation generated"
-        )
-
-        # --------------------------------
-        # FORMAT
-        # --------------------------------
-
-        print(
-            "\n[7] Formatting..."
+            "\n[3] Running Forecast Workflow..."
         )
 
         result = (
-            OutputFormatterService()
+
+            DemandForecastAgent()
+
             .execute(
-                item,
-                forecast,
-                confidence,
-                horizon,
-                explanation
+
+                payload,
+
+                horizon
+
             )
+
         )
 
         print(
             "\n========== RESULT ==========\n"
         )
 
-        print(
-            result[0]
-        )
+        if isinstance(
+            result,
+            dict
+        ):
 
-        print(
-            "\nExplanation:"
-        )
+            for k, v in result.items():
 
-        print(
-            result[1]
-        )
+                print(
+                    f"{k}:"
+                )
 
-        print(
-            "\nInventory Decision:"
-        )
+                print(v)
 
-        print(
-            decision
-        )
+                print()
 
-        print(
-            "\nRecommended Reorder:"
-        )
+        else:
 
-        print(
-            reorder
-        )
+            print(
+                result
+            )
 
         print(
             "\nPASS END-TO-END SUCCESS"

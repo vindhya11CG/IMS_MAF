@@ -1,4 +1,4 @@
-from .azure_config_service import (
+from .azure_services import (
     AzureConfigService
 )
 
@@ -19,30 +19,34 @@ class ExplanationService:
             cfg.deployment
         )
 
-    def execute(
-        self,
-        sku,
-        forecast,
-        confidence
-    ):
+    def execute(self, sku, forecast, confidence):
+        try:
+            r = (
+                self.client.chat.completions.create(
 
-        r = (
-            self.client.chat.completions.create(
                 model=self.model,
+
                 messages=[
+
                     {
-                        "role":"system",
-                        "content":"""
-Explain inventory demand.
-Short.
-Business language.
-"""
-                    },
-                    {
-                        "role":"user",
+
+                        "role":
+                        "system",
+
                         "content":
+                        "Explain inventory forecast."
+
+                    },
+
+                    {
+
+                        "role":
+                        "user",
+
+                        "content":
+
                         f"""
-SKU:
+Product:
 {sku}
 
 Forecast:
@@ -51,13 +55,29 @@ Forecast:
 Confidence:
 {confidence}
 """
+
                     }
+
                 ]
+
             )
+
         )
 
-        return (
-            r.choices[0]
-            .message
-            .content
+            return r.choices[0].message.content
+        except Exception:
+            return (
+
+            f"""
+Forecast:
+
+{forecast}
+
+Confidence:
+
+{confidence}
+
+Inventory planning recommended.
+"""
+
         )

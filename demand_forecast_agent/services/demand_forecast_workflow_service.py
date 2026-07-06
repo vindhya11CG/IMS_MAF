@@ -1,100 +1,80 @@
-from agent_framework import Agent
-import pandas as pd
-import os
+from demand_forecast_agent.services.core_forecasting_service import (
+    ForecastService,
+    ConfidenceService,
+    LoggingService,
+)
+from demand_forecast_agent.services.azure_services import ExplanationService
+from demand_forecast_agent.services.feature_engineering_service import (
+    FeatureEngineeringService,
+)
+from demand_forecast_agent.services.decision_services import (
+    InventoryDecisionService,
+    ReorderService,
+    InputValidatorService,
+    OutputFormatterService,
+)
 
-from demand_forecast_agent.services.forecast_service import ForecastService
-from demand_forecast_agent.services.confidence_service import ConfidenceService
-from demand_forecast_agent.services.output_formatter_service import OutputFormatterService
-from demand_forecast_agent.services.explanation_service import ExplanationService
 
-from demand_forecast_agent.services.feature_engineering_service import create_features
-from demand_forecast_agent.services.inventory_decision_service import get_inventory_decision
-from demand_forecast_agent.services.reorder_service import calculate_reorder
-from demand_forecast_agent.services.logging_service import log_prediction
+class DemandForecastWorkflow:
 
+    async def run(self, payload, horizon=14):
 
-class DemandForecastWorkflow(Agent):
+        validation = InputValidatorService().execute(payload)
 
-    async def run(
-        self,
-        item_id,
-        horizon
-    ):
+        if not validation["valid"]:
+            return validation
 
-        data = pd.read_parquet(
-            os.getenv("DATA_PATH")
+        # Feature-engineer the raw payload once. `engineered` carries both
+        # the original raw fields and the derived features - the model
+        # matrix is built from it just before calling the model (see
+        # ForecastService), so it stays as the single object flowing
+        # through the rest of the workflow too.
+        engineered = FeatureEngineeringService().execute(payload)
+
+        forecast = ForecastService().execute(
+            engineered,
+            horizon,
+            product_id=payload["product_id"],
         )
 
-        row = (
-            data[
-                data["item_id"]
-                ==
-                item_id
-            ]
-            .tail(1)
+        if forecast["status"] != "SUCCESS":
+            return forecast
+
+        prediction = forecast["forecast"]
+
+        confidence = ConfidenceService().execute()
+
+        decision = InventoryDecisionService().execute(
+            prediction,
+            payload["on_hand_qty"],
+            payload["reorder_point_qty"],
+            payload["safety_stock_qty"],
         )
 
-        row = create_features(row)
-
-        stock = float(
-            row.iloc[0]["stock_level"]
+        reorder = ReorderService().execute(
+            prediction,
+            payload["on_hand_qty"],
+            payload.get("allocated_qty", 0),
+            payload["safety_stock_qty"],
         )
 
-        forecast = (
-            ForecastService()
-            .execute(
-                item_id,
-                horizon
-            )
+        LoggingService().execute({
+            "payload": payload,
+            "forecast": prediction,
+        })
+
+        explanation = ExplanationService().execute(
+            payload["product_id"],
+            prediction,
+            confidence,
         )
 
-        confidence = (
-            ConfidenceService()
-            .execute()
+        return OutputFormatterService().execute(
+            payload["product_id"],
+            prediction,
+            confidence,
+            horizon,
+            explanation,
+            decision,
+            reorder,
         )
-
-        decision = (
-            get_inventory_decision(
-                forecast,
-                stock
-            )
-        )
-
-        reorder = (
-            calculate_reorder(
-                forecast,
-                stock
-            )
-        )
-
-        log_prediction(
-            row.to_dict(),
-            forecast
-        )
-
-        explanation = (
-            ExplanationService()
-            .execute(
-                item_id,
-                forecast,
-                confidence
-            )
-        )
-
-        result = (
-            OutputFormatterService()
-            .execute(
-                item_id,
-                forecast,
-                confidence,
-                horizon,
-                explanation
-            )
-        )
-
-        return {
-            "forecast": result[0],
-            "explanation": result[1],
-            "inventory_decision": decision,
-            "recommended_reorder": reorder
-        }
