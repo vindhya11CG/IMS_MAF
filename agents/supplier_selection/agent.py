@@ -81,7 +81,7 @@ class SupplierSelectionAgent:
             
             # Evaluate suppliers for each order
             logger.info("\n[PHASE 5.2] Evaluating suppliers against policies...")
-            selections = self._evaluate_and_select_suppliers(replenishment_orders)
+            selections, raw_evaluations = self._evaluate_and_select_suppliers(replenishment_orders)
             logger.info(f"  Selected suppliers for {len(selections)} orders")
             
             # Generate summary
@@ -109,6 +109,7 @@ class SupplierSelectionAgent:
                 "selections": selections,
                 "summary": summary,
                 "azure_analysis": azure_analysis,
+                "evaluations": raw_evaluations,
             }
         except Exception as e:
             logger.error(f"Error in supplier selection workflow: {e}", exc_info=True)
@@ -117,9 +118,13 @@ class SupplierSelectionAgent:
     def _evaluate_and_select_suppliers(
         self,
         replenishment_orders: List[ReplenishmentOrder],
-    ) -> List[SupplierSelectionResult]:
-        """Evaluate and select suppliers for all replenishment orders."""
-        selections = []
+    ) -> tuple[List[SupplierSelectionResult], List[object]]:
+        """Evaluate and select suppliers for all replenishment orders.
+
+        Returns a tuple of (selections, raw_evaluations_list).
+        """
+        selections: List[SupplierSelectionResult] = []
+        raw_evaluations: List[object] = []
         
         for order in replenishment_orders:
             # Get all possible suppliers for this SKU from DB4
@@ -166,6 +171,7 @@ class SupplierSelectionAgent:
                 location_id=order.location_id,
                 costs_by_supplier=costs_by_supplier,
             )
+            raw_evaluations.extend(evaluations)
             
             # Apply policy to each evaluation
             lowest_cost = min(cost[0] for cost in costs_by_supplier.values())
@@ -215,7 +221,7 @@ class SupplierSelectionAgent:
             
             selections.append(selection)
         
-        return selections
+        return selections, raw_evaluations
 
     def _load_product_category_map(self) -> dict[int, int]:
         """Load SKU -> category mapping once."""
@@ -392,4 +398,5 @@ class SupplierSelectionAgent:
                 exceptions=[],
             ),
             "azure_analysis": None,
+            "evaluations": [],
         }

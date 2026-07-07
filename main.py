@@ -114,6 +114,17 @@ def main() -> None:
             print("PHASE 5: AZURE OPENAI ANALYSIS")
             print("="*100)
             print(supplier_results["azure_analysis"])
+
+    # Policy Agent Summary (if available)
+    policy_results = result.get("policy_results")
+    if policy_results and policy_results.get("summary"):
+        print("\n" + "="*100)
+        print("POLICY AGENT - RE-EVALUATION SUMMARY")
+        print("="*100)
+        ps = policy_results["summary"]
+        print(f"Evaluated: {ps.get('evaluated')}")
+        print(f"Compliant: {ps.get('compliant')}")
+        print(f"Non-compliant: {ps.get('non_compliant')}")
     
     logger.info("Complete workflow execution finished")
 
