@@ -8,6 +8,7 @@ from typing import Optional
 from agents.inventory_monitoring import InventoryMonitoringAgent
 from agents.replenishment_planning import ReplenishmentPlanningAgent
 from agents.supplier_selection import SupplierSelectionAgent
+from agents.policy_agent.agent import PolicyAgent
 from config import AzureOpenAIClient, AzureOpenAIConfig
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ class AgentOrchestrator:
             supplier_selection_agent
             or SupplierSelectionAgent(openai_client=openai_client, policy_name=supplier_policy)
         )
+        self.policy_agent = PolicyAgent()
+        self.supplier_policy = supplier_policy
         logger.info("AgentOrchestrator initialized")
 
     def execute(self) -> dict[str, object]:
@@ -77,6 +80,12 @@ class AgentOrchestrator:
             
             selections = supplier_results.get("selections", [])
             logger.info(f"  Completed: Made {len(selections)} supplier selections")
+
+            # Run the PolicyAgent on the raw supplier evaluations (always run, may be empty)
+            evaluations = supplier_results.get("evaluations", [])
+            logger.info("\n[POLICY AGENT] Running policy re-evaluation (may be empty)...")
+            policy_results = self.policy_agent.execute(evaluations, policy_name=self.supplier_policy)
+            logger.info(f"  Policy Agent: {policy_results.get('summary', {})}")
             
             logger.info("\n" + "="*100)
             logger.info("AGENT ORCHESTRATOR - COMPLETE IMS WORKFLOW FINISHED")
@@ -88,6 +97,7 @@ class AgentOrchestrator:
                 "phase_1_3_results": inventory_results,
                 "phase_4_results": replenishment_results,
                 "phase_5_results": supplier_results,
+                "policy_results": policy_results,
                 "summary": self._build_workflow_summary(
                     inventory_results,
                     replenishment_results,
