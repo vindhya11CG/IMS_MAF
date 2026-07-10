@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
+*$py.class
+*.so
 
 # Virtual environment
 venv/
@@ -22,6 +25,15 @@ Thumbs.db
 # Logs and temp files
 *.log
 *.tmp
+# ==========================================
+# Testing & Coverage
+# ==========================================
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.nox/
 
 # Documentation build (if any)
 docs/_build/
@@ -43,3 +55,24 @@ coverage/
 
 # Database files
 *.sqlite3
+
+# ==========================================
+# ML Models & Serialized Objects
+# ==========================================
+*.pkl
+*.joblib
+*.h5
+*.onnx
+*.pt
+*.pth
+
+# ==========================================
+# Training Artifacts
+# ==========================================
+training_models/model_data1/
+training_models/train_data.pkl
+training_models/test_data.pkl
+training_models/val_data.pkl
+training_models/hybrid_model.pkl
+training_models/model_metrics.json
+training_models/model_features.json
