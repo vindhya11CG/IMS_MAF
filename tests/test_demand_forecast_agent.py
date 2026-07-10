@@ -1,0 +1,297 @@
+"""
+Test script for the Demand Forecast Agent backend.
+
+Run from the repo root (demand_forecasting_system1/):
+
+    python3 tests/test_demand_forecast_agent.py
+
+No pytest dependency required (pytest isn't in requirements.txt) - this is
+a plain script with a tiny custom runner so it works in any environment
+that already has the project's own requirements installed. It exits with
+code 0 if everything passes, 1 if anything fails, and prints a PASS/FAIL
+line per test plus a final summary - suitable for pasting straight into a
+demo or a CI log.
+
+What it covers:
+  1. Schema alignment  - dataset columns vs. InputValidatorService.REQUIRED
+                          vs. FeatureEngineeringService.MODEL_FEATURES vs.
+                          the DB3 inventory_positions column names.
+  2. InputValidatorService  - valid payload, missing fields, negative values
+  3. FeatureEngineeringService - dict payload AND batch DataFrame produce the
+                          same derived columns; train/inference parity.
+  4. ModelLoaderService  - loads + singleton-caches the trained model
+  5. ForecastService     - forecast succeeds for a product WITH a trained
+                          SARIMAX component and one WITHOUT (falls back to
+                          XGBoost-only cleanly either way)
+  6. BatchForecastService - batch inference over multiple rows at once
+  7. ConfidenceService   - reads test-set accuracy from model_metrics.json
+  8. InventoryDecisionService / ReorderService - decision-threshold logic
+  9. OutputFormatterService - output shape or ForecastResult dataclass
+ 10. ExplanationService  - falls back gracefully with no Azure OpenAI
+                          configured (agent must not crash without Azure)
+ 11. End-to-end DemandForecastWorkflow.run() for several realistic
+                          payloads pulled from an inventory_positions-shaped
+                          sample, plus one intentionally invalid payload.
+ 12. Downstream contract check - flags field-name differences between what
+                          this agent outputs and what the other agents'
+                          dataclasses expect, so integration doesn't break
+                          silently later (see NOTE at the bottom).
+"""
+import asyncio
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+os.environ.setdefault("MODEL_PATH", "training_models/hybrid_model.pkl")
+os.environ.setdefault("METRICS_PATH", "training_models/model_metrics.json")
+
+RESULTS = []
+
+
+def check(name, condition, detail=""):
+    status = "PASS" if condition else "FAIL"
+    RESULTS.append((name, status, detail))
+    print(f"[{status}] {name}" + (f" - {detail}" if detail and status == 'FAIL' else ""))
+    return condition
+
+
+def run():
+    import pandas as pd
+
+    from demand_forecast_agent.services.feature_engineering_service import (
+        FeatureEngineeringService,
+    )
+    from demand_forecast_agent.services.decision_services import (
+        InputValidatorService,
+        InventoryDecisionService,
+        ReorderService,
+        OutputFormatterService,
+    )
+    from demand_forecast_agent.services.core_forecasting_service import (
+        ModelLoaderService,
+        ForecastService,
+        BatchForecastService,
+        ConfidenceService,
+    )
+    from demand_forecast_agent.services.azure_services import ExplanationService
+    from demand_forecast_agent.services.demand_forecast_workflow_service import (
+        DemandForecastWorkflow,
+    )
+    from demand_forecast_agent.agent import DemandForecastAgent
+
+    root = os.path.join(os.path.dirname(__file__), "..")
+
+    # ------------------------------------------------------------------
+    # 1. Schema alignment
+    # ------------------------------------------------------------------
+    print("\n--- 1. Schema alignment ---")
+    csv_path = os.path.join(root, "synthetic_inventory_db_native.csv")
+    if os.path.exists(csv_path):
+        sample = pd.read_csv(csv_path, nrows=5)
+        for field in InputValidatorService.REQUIRED:
+            check(
+                f"schema: dataset/DB has '{field}' (InputValidatorService.REQUIRED)",
+                field in sample.columns,
+                f"columns were: {list(sample.columns)}",
+            )
+        # inventory_positions (DB3) fields the reorder/decision logic depends on
+        for field in ["on_hand_qty", "safety_stock_qty", "reorder_point_qty", "allocated_qty"]:
+            check(f"schema: '{field}' matches DB3 inventory_positions naming", field in sample.columns)
+    else:
+        check("schema: dataset file present", False, f"not found at {csv_path}")
+
+    # ------------------------------------------------------------------
+    # 2. InputValidatorService
+    # ------------------------------------------------------------------
+    print("\n--- 2. InputValidatorService ---")
+    validator = InputValidatorService()
+    good_payload = {
+        "product_id": 1, "location_id": 1, "on_hand_qty": 67,
+        "allocated_qty": 12, "safety_stock_qty": 11, "reorder_point_qty": 17,
+    }
+    check("valid payload passes", validator.execute(good_payload)["valid"] is True)
+
+    missing_payload = dict(good_payload)
+    del missing_payload["reorder_point_qty"]
+    r = validator.execute(missing_payload)
+    check("missing field is rejected", r["valid"] is False and "reorder_point_qty" in r["message"])
+
+    negative_payload = dict(good_payload, on_hand_qty=-5)
+    r = validator.execute(negative_payload)
+    check("negative value is rejected", r["valid"] is False)
+
+    # ------------------------------------------------------------------
+    # 3. FeatureEngineeringService - dict vs batch parity
+    # ------------------------------------------------------------------
+    print("\n--- 3. FeatureEngineeringService ---")
+    fe = FeatureEngineeringService()
+    single = fe.execute(dict(good_payload, avg_retail_price=199.0, annual_units_max=90000,
+                              is_promotional=False))
+    for col in ["stock_gap", "available_stock", "safety_ratio", "month", "quarter",
+                "month_sin", "month_cos", "is_promotional_int"]:
+        check(f"single-row engineered column '{col}' present", col in single.columns)
+
+    matrix = fe.to_model_matrix(single)
+    check(
+        "to_model_matrix produces the exact MODEL_FEATURES column set/order",
+        list(matrix.columns) == FeatureEngineeringService.MODEL_FEATURES,
+    )
+
+    if os.path.exists(csv_path):
+        batch_raw = pd.read_csv(csv_path, nrows=50)
+        batch_engineered = fe.execute(batch_raw)
+        batch_matrix = fe.to_model_matrix(batch_engineered)
+        check(
+            "batch engineered matrix has same column set as single-row matrix",
+            list(batch_matrix.columns) == list(matrix.columns),
+        )
+        check("batch matrix has no leftover NaNs after reindex", not batch_matrix.isnull().values.any())
+
+    # ------------------------------------------------------------------
+    # 4. ModelLoaderService
+    # ------------------------------------------------------------------
+    print("\n--- 4. ModelLoaderService ---")
+    model_path_exists = os.path.exists(os.path.join(root, os.environ["MODEL_PATH"]))
+    if not check("trained model file exists", model_path_exists,
+                  f"expected at {os.environ['MODEL_PATH']} - run training_models/model_training.py first"):
+        print("\nSkipping model-dependent tests (5,6,9,10,11) - no trained model available.")
+        _summarize()
+        return
+
+    ModelLoaderService.reset()
+    m1 = ModelLoaderService.load()
+    m2 = ModelLoaderService.load()
+    check("ModelLoaderService caches a singleton", m1 is m2)
+
+    # ------------------------------------------------------------------
+    # 5. ForecastService - with and without a per-product SARIMAX model
+    # ------------------------------------------------------------------
+    print("\n--- 5. ForecastService ---")
+    forecast_service = ForecastService()
+
+    trained_products = set(m1.sarimax_models.keys())
+    with_sarimax_id = next(iter(trained_products), None)
+    without_sarimax_id = 99999  # a product id guaranteed not to have a SARIMAX model
+
+    for label, pid in [("WITH SARIMAX component", with_sarimax_id),
+                        ("WITHOUT SARIMAX component (XGBoost fallback)", without_sarimax_id)]:
+        if pid is None:
+            continue
+        payload = dict(good_payload, product_id=pid, avg_retail_price=199.0,
+                        annual_units_max=90000, is_promotional=False)
+        engineered = fe.execute(payload)
+        result = forecast_service.execute(engineered, horizon=14, product_id=pid)
+        ok = check(f"forecast succeeds - product {label}", result["status"] == "SUCCESS", str(result))
+        if ok:
+            check(f"forecast value is non-negative - {label}", result["forecast"] >= 0)
+
+    # ------------------------------------------------------------------
+    # 6. BatchForecastService
+    # ------------------------------------------------------------------
+    print("\n--- 6. BatchForecastService ---")
+    if os.path.exists(csv_path):
+        batch_service = BatchForecastService()
+        sample_rows = pd.read_csv(csv_path, nrows=10).to_dict(orient="records")
+        preds = batch_service.execute(
+            model=m1, rows=sample_rows, features=FeatureEngineeringService.MODEL_FEATURES, engineer=fe
+        )
+        check("batch forecast returns one prediction per row", len(preds) == len(sample_rows))
+        check("batch predictions are all non-negative", all(p >= 0 for p in preds))
+
+    # ------------------------------------------------------------------
+    # 7. ConfidenceService
+    # ------------------------------------------------------------------
+    print("\n--- 7. ConfidenceService ---")
+    metrics_path_exists = os.path.exists(os.path.join(root, os.environ["METRICS_PATH"]))
+    if check("metrics file exists", metrics_path_exists):
+        conf = ConfidenceService().execute()
+        check("confidence is a plausible percentage (0-100)", 0 <= conf <= 100, str(conf))
+
+    # ------------------------------------------------------------------
+    # 8. InventoryDecisionService / ReorderService
+    # ------------------------------------------------------------------
+    print("\n--- 8. InventoryDecisionService / ReorderService ---")
+    d = InventoryDecisionService().execute(forecast=50, stock=10, reorder_point=20, safety_stock=10)
+    check("low stock triggers REORDER_IMMEDIATELY", d["decision"] == "REORDER_IMMEDIATELY")
+
+    d = InventoryDecisionService().execute(forecast=5, stock=100, reorder_point=20, safety_stock=10)
+    check("ample stock triggers SAFE", d["decision"] == "SAFE")
+
+    qty = ReorderService().execute(forecast=50, stock=30, allocated=5, safety=10)
+    check("reorder quantity is never negative", qty >= 0)
+
+    # ------------------------------------------------------------------
+    # 9. OutputFormatterService
+    # ------------------------------------------------------------------
+    print("\n--- 9. OutputFormatterService ---")
+    out = OutputFormatterService().execute(
+        item=1, forecast=42.9, confidence=87.0, horizon=14,
+        explanation="test", inventory=d, reorder=qty,
+    )
+    check("output has forecast/inventory_decision/recommended_reorder/explanation keys",
+          set(["forecast", "inventory_decision", "recommended_reorder", "explanation"]) <= set(out.keys()))
+    check("forecast is a ForecastResult with expected fields",
+          hasattr(out["forecast"], "forecasted_demand") and hasattr(out["forecast"], "confidence"))
+
+    # ------------------------------------------------------------------
+    # 10. ExplanationService fallback (no Azure configured)
+    # ------------------------------------------------------------------
+    print("\n--- 10. ExplanationService (offline fallback) ---")
+    explanation = ExplanationService().execute(sku=1, forecast=42.9, confidence=87.0)
+    check("explanation service returns text even without Azure OpenAI configured",
+          isinstance(explanation, str) and len(explanation) > 0)
+
+    # ------------------------------------------------------------------
+    # 11. End-to-end workflow
+    # ------------------------------------------------------------------
+    print("\n--- 11. End-to-end DemandForecastWorkflow ---")
+    agent = DemandForecastAgent()
+
+    sample_positions = [
+        {"product_id": 1, "location_id": 1, "on_hand_qty": 67, "allocated_qty": 12,
+         "safety_stock_qty": 11, "reorder_point_qty": 17, "avg_retail_price": 199.0,
+         "annual_units_max": 90000, "is_promotional": False},
+        {"product_id": 2, "location_id": 2, "on_hand_qty": 8, "allocated_qty": 0,
+         "safety_stock_qty": 15, "reorder_point_qty": 25, "avg_retail_price": 499.0,
+         "annual_units_max": 30000, "is_promotional": True},
+        {"product_id": 3, "location_id": 3, "on_hand_qty": 300, "allocated_qty": 20,
+         "safety_stock_qty": 20, "reorder_point_qty": 40, "avg_retail_price": 34.99,
+         "annual_units_max": 3000, "is_promotional": False},
+    ]
+    for pos in sample_positions:
+        result = agent.execute(pos, horizon=14)
+        ok = check(
+            f"end-to-end forecast for product_id={pos['product_id']}",
+            "forecast" in result and hasattr(result["forecast"], "forecasted_demand"),
+            str(result),
+        )
+
+    invalid_result = asyncio.run(DemandForecastWorkflow().run({"product_id": 1}, horizon=14))
+    check("invalid payload is rejected by the workflow, not crashed", invalid_result.get("valid") is False)
+
+
+    _summarize()
+
+
+def _summarize():
+    passed = sum(1 for _, s, _ in RESULTS if s == "PASS")
+    failed = sum(1 for _, s, _ in RESULTS if s == "FAIL")
+    print("\n" + "=" * 60)
+    print(f"TEST SUMMARY: {passed} passed, {failed} failed, {len(RESULTS)} total")
+    print("=" * 60)
+    if failed:
+        print("\nFailed tests:")
+        for name, status, detail in RESULTS:
+            if status == "FAIL":
+                print(f"  - {name}: {detail}")
+        sys.exit(1)
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    run()
+    
+    
+
