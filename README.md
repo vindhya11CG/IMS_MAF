@@ -99,7 +99,7 @@ RISK_DETECTED = TRUE if ANY of these conditions are met:
 ## Data Overview
 
 ### Database Structure
-Our system processes data from 5 CSV export databases:
+Our system processes data from 5 CSV export databases and one enriched demand context file:
 
 | Database | Purpose | Records | Currently Used |
 |----------|---------|---------|-----------------|
@@ -108,6 +108,7 @@ Our system processes data from 5 CSV export databases:
 | DB3 | Inventory core (positions, in-transit) | ~265K | ✅ Phase 1-5 |
 | DB4 | Suppliers (pricing, performance, risk) | 35+ | ✅ Phase 1-5 |
 | DB5 | Operations (snapshots, events) | ~100K | ✅ Phase 1-3 |
+| Weather/Festival Demand | Enriched demand context with weather and festival signals | 100K+ | ✅ Available |
 
 ### Coverage
 - **Locations**: 53 (50 stores + 3 distribution centers across 10 states)
@@ -118,6 +119,7 @@ Our system processes data from 5 CSV export databases:
 ### Risk Scenario Note
 - If the current dataset contains no inventory positions that meet the risk thresholds, the workflow will complete successfully but may produce zero Phase 4/5 orders.
 - For validation and testing, a controlled risky dataset was induced in the existing CSV files without changing any schema. See [RISKY_DATASET_INDUCTION.md](RISKY_DATASET_INDUCTION.md).
+- The enriched weather/festival demand file adds new columns for demand shaping and should be joined using location_id, product_id/sku_id, and date. See [WEATHER_FESTIVAL_SCHEMA.md](WEATHER_FESTIVAL_SCHEMA.md).
 
 ---
 

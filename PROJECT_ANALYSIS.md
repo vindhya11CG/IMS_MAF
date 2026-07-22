@@ -21,6 +21,11 @@ This document provides comprehensive analysis of the three project PDFs and thei
 - Specifies inputs and outputs for each phase
 - Implementation roadmap
 
+### 4. Weather and Festival Enrichment Dataset
+- Adds weather conditions and festival signals to the base inventory demand model
+- Supports richer forecasting, risk analysis, and promotion planning
+- Uses join keys of location_id, product_id/sku_id, and date
+
 ---
 
 ## Executive Summary

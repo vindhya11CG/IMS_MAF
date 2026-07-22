@@ -3,9 +3,29 @@ from __future__ import annotations
 import csv
 import logging
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional
 
-from .parsing import parse_int, parse_optional_int
+from .parsing import parse_bool, parse_float, parse_int, parse_optional_int
+
+if TYPE_CHECKING:
+    from agents.inventory_monitoring.models.inventory_models import InventoryPosition, WeatherFestivalDemandRecord
+
+
+def parse_optional_float(value: Optional[str | int | float]) -> Optional[float]:
+    """Parse a string or numeric value to optional float."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    value = value.strip().replace("\ufeff", "")
+    if value == "" or value.upper() in {"NULL", "NONE"}:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
 
 logger = logging.getLogger(__name__)
 
@@ -56,11 +76,11 @@ class CsvInventoryDataLoader:
             logger.error(f"Error reading CSV file {file_path}: {e}")
             return []
 
-    def load_inventory_positions(self) -> List[InventoryPosition]:
+    def load_inventory_positions(self) -> List["InventoryPosition"]:
         """Load inventory positions from CSV."""
-        rows = self._read_rows(self.root_dir / "db3_csv_export" / "inventory_positions.csv")
-        # Local import to avoid circular import at module import time
         from agents.inventory_monitoring.models.inventory_models import InventoryPosition
+
+        rows = self._read_rows(self.root_dir / "db3_csv_export" / "inventory_positions.csv")
 
         positions: List[InventoryPosition] = []
         for row in rows:
@@ -105,6 +125,133 @@ class CsvInventoryDataLoader:
                 logger.error(f"Error parsing inventory snapshot row: {e}")
                 continue
         return snapshots
+
+    def load_weather_festival_dataset(self, file_name: str | Path = "synthetic_inventory_weather_region_v2_festival_demand.csv") -> List["WeatherFestivalDemandRecord"]:
+        """Load the weather-and-festival enriched demand dataset."""
+        from agents.inventory_monitoring.models.inventory_models import WeatherFestivalDemandRecord
+
+        file_path = self._resolve_data_file(file_name)
+        rows = self._read_rows(file_path)
+
+        records: List[WeatherFestivalDemandRecord] = []
+        for row in rows:
+            try:
+                record = WeatherFestivalDemandRecord(
+                    date=row.get("date", "").strip(),
+                    sku_id=parse_int(row.get("product_id") or row.get("sku_id")),
+                    location_id=parse_int(row.get("location_id")),
+                    category_id=parse_optional_int(row.get("category_id")),
+                    velocity_class_id=parse_optional_int(row.get("velocity_class_id")),
+                    on_hand_qty=parse_optional_float(row.get("on_hand_qty")),
+                    allocated_qty=parse_optional_float(row.get("allocated_qty")),
+                    safety_stock_qty=parse_optional_float(row.get("safety_stock_qty")),
+                    reorder_point_qty=parse_optional_float(row.get("reorder_point_qty")),
+                    daily_demand=parse_optional_float(row.get("daily_demand")),
+                    demand_std_dev=parse_optional_float(row.get("demand_std_dev")),
+                    lead_time_days=parse_optional_float(row.get("lead_time_days")),
+                    supplier_id=parse_optional_int(row.get("supplier_id")),
+                    avg_retail_price=parse_optional_float(row.get("avg_retail_price")),
+                    holding_cost_per_unit_day=parse_optional_float(row.get("holding_cost_per_unit_day")),
+                    handling_cost_per_unit=parse_optional_float(row.get("handling_cost_per_unit")),
+                    order_fulfillment_rate=parse_optional_float(row.get("order_fulfillment_rate")),
+                    total_orders_last_month=parse_optional_float(row.get("total_orders_last_month")),
+                    turnover_ratio=parse_optional_float(row.get("turnover_ratio")),
+                    annual_units_max=parse_optional_float(row.get("annual_units_max")),
+                    season_multiplier=parse_optional_float(row.get("season_multiplier")),
+                    is_promotional=parse_bool(row.get("is_promotional")),
+                    month=parse_optional_int(row.get("month")),
+                    quarter=parse_optional_int(row.get("quarter")),
+                    day_of_year=parse_optional_int(row.get("day_of_year")),
+                    month_sin=parse_optional_float(row.get("month_sin")),
+                    month_cos=parse_optional_float(row.get("month_cos")),
+                    is_promotional_int=parse_optional_int(row.get("is_promotional_int")),
+                    stock_gap=parse_optional_float(row.get("stock_gap")),
+                    available_stock=parse_optional_float(row.get("available_stock")),
+                    safety_ratio=parse_optional_float(row.get("safety_ratio")),
+                    velocity_score=parse_optional_float(row.get("velocity_score")),
+                    country=row.get("country", "").strip() or None,
+                    country_code=row.get("country_code", "").strip() or None,
+                    state_province=row.get("state_province", "").strip() or None,
+                    city=row.get("city", "").strip() or None,
+                    climate_zone=row.get("climate_zone", "").strip() or None,
+                    population_index=parse_optional_float(row.get("population_index")),
+                    income_index=parse_optional_float(row.get("income_index")),
+                    urbanization_score=parse_optional_float(row.get("urbanization_score")),
+                    regional_demand_index=parse_optional_float(row.get("regional_demand_index")),
+                    consumer_spending_index=parse_optional_float(row.get("consumer_spending_index")),
+                    weather_sensitivity_score=parse_optional_float(row.get("weather_sensitivity_score")),
+                    logistics_complexity_score=parse_optional_float(row.get("logistics_complexity_score")),
+                    distance_to_dc_km=parse_optional_float(row.get("distance_to_dc_km")),
+                    regional_supply_risk_score=parse_optional_float(row.get("regional_supply_risk_score")),
+                    market_maturity_index=parse_optional_float(row.get("market_maturity_index")),
+                    temperature_c=parse_optional_float(row.get("temperature_c")),
+                    feels_like_c=parse_optional_float(row.get("feels_like_c")),
+                    humidity_pct=parse_optional_float(row.get("humidity_pct")),
+                    rainfall_mm=parse_optional_float(row.get("rainfall_mm")),
+                    snowfall_cm=parse_optional_float(row.get("snowfall_cm")),
+                    wind_speed_kmh=parse_optional_float(row.get("wind_speed_kmh")),
+                    uv_index=parse_optional_float(row.get("uv_index")),
+                    cloud_cover_pct=parse_optional_float(row.get("cloud_cover_pct")),
+                    pressure_hpa=parse_optional_float(row.get("pressure_hpa")),
+                    visibility_km=parse_optional_float(row.get("visibility_km")),
+                    heatwave_flag=parse_bool(row.get("heatwave_flag")),
+                    coldwave_flag=parse_bool(row.get("coldwave_flag")),
+                    monsoon_flag=parse_bool(row.get("monsoon_flag")),
+                    heavy_rain_flag=parse_bool(row.get("heavy_rain_flag")),
+                    snowfall_flag=parse_bool(row.get("snowfall_flag")),
+                    extreme_weather_flag=parse_bool(row.get("extreme_weather_flag")),
+                    temperature_deviation=parse_optional_float(row.get("temperature_deviation")),
+                    rainfall_deviation=parse_optional_float(row.get("rainfall_deviation")),
+                    weather_severity_index=parse_optional_float(row.get("weather_severity_index")),
+                    weather_demand_multiplier=parse_optional_float(row.get("weather_demand_multiplier")),
+                    weather_supply_risk_score=parse_optional_float(row.get("weather_supply_risk_score")),
+                    climate_anomaly_score=parse_optional_float(row.get("climate_anomaly_score")),
+                    weather_confidence_score=parse_optional_float(row.get("weather_confidence_score")),
+                    weather_adjusted_demand=parse_optional_float(row.get("weather_adjusted_demand")),
+                    regional_adjusted_demand=parse_optional_float(row.get("regional_adjusted_demand")),
+                    weather_adjusted_safety_stock=parse_optional_float(row.get("weather_adjusted_safety_stock")),
+                    weather_adjusted_reorder_point=parse_optional_float(row.get("weather_adjusted_reorder_point")),
+                    demand_volatility_score=parse_optional_float(row.get("demand_volatility_score")),
+                    supply_disruption_risk=parse_optional_float(row.get("supply_disruption_risk")),
+                    stockout_weather_risk=parse_optional_float(row.get("stockout_weather_risk")),
+                    inventory_weather_pressure=parse_optional_float(row.get("inventory_weather_pressure")),
+                    regional_inventory_risk=parse_optional_float(row.get("regional_inventory_risk")),
+                    day_of_week=parse_optional_int(row.get("day_of_week")),
+                    week_of_year=parse_optional_int(row.get("week_of_year")),
+                    season=row.get("season", "").strip() or None,
+                    forecast_demand_next_7_days=parse_optional_float(row.get("forecast_demand_next_7_days")),
+                    forecast_demand_next_14_days=parse_optional_float(row.get("forecast_demand_next_14_days")),
+                    forecast_demand_next_30_days=parse_optional_float(row.get("forecast_demand_next_30_days")),
+                    is_festival_day=parse_bool(row.get("is_festival_day")),
+                    days_to_next_festival=parse_optional_float(row.get("days_to_next_festival")),
+                    days_since_last_festival=parse_optional_float(row.get("days_since_last_festival")),
+                    festival_proximity_score=parse_optional_float(row.get("festival_proximity_score")),
+                    is_shopping_season=parse_bool(row.get("is_shopping_season")),
+                    daily_demand_pre_festival_adjustment=parse_optional_float(row.get("daily_demand_pre_festival_adjustment")),
+                )
+                records.append(record)
+            except Exception as e:
+                logger.error(f"Error parsing weather/festival row: {e}")
+                continue
+        return records
+
+    def _resolve_data_file(self, file_name: str | Path) -> Path:
+        """Resolve a data file from the loader root or the workspace root."""
+        candidate = Path(file_name)
+        if candidate.is_absolute() and candidate.exists():
+            return candidate
+
+        local_path = self.root_dir / candidate
+        if local_path.exists():
+            return local_path
+
+        workspace_root = self.root_dir.parent
+        if workspace_root.exists():
+            workspace_candidate = workspace_root / candidate
+            if workspace_candidate.exists():
+                return workspace_candidate
+
+        return local_path
 
     def load_in_transit_inventory(self) -> List[Dict[str, int]]:
         """Load in-transit inventory from CSV."""
