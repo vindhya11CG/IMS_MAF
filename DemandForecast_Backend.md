@@ -142,3 +142,83 @@ Found by inspecting a full pipeline run's output JSON:
   deletion in this pass.
 - `MAX_ML_FORECAST_CALLS` (default 200) caps ML-enhanced rows per run; raise
   it for a full nightly batch on a larger dataset.
+
+---
+
+## Phase 6: Weather & Festival Demand Integration (July 2026)
+
+The system has been fully extended with weather, festival, seasonal, and regional demand context signals across all 5 pipeline agents, data loaders, feature engineering, model inference, and backend FastAPI endpoints.
+
+### Key Additions & Schema Architecture
+
+#### 1. Database Schema (`data/csv_exports/db6_csv_export/`)
+Three synthetic database tables provide weather, festival, and regional demand signals:
+- **`demand_context_fact.csv`**: Daily weather observations, severity indices, risk scores, and festival flags per (SKU, location).
+- **`festival_calendar.csv`**: Reference table of national & local festivals, dates, and expected demand lift.
+- **`location_climate_profile.csv`**: Climate zones, weather sensitivity scores, and regional demand indices per location.
+
+#### 2. Core Data Models (`agents/inventory_monitoring/models/inventory_models.py`)
+- **`WeatherFestivalContext`**: Lightweight context carrier object containing:
+  - Multipliers & Risk Scores: `weather_demand_multiplier`, `weather_severity_index`, `supply_disruption_risk`, `climate_anomaly_score`, `regional_demand_index`.
+  - Condition Flags: `heatwave_flag`, `coldwave_flag`, `monsoon_flag`, `heavy_rain_flag`, `snowfall_flag`, `extreme_weather_flag`.
+  - Festival Flags: `is_festival_day`, `festival_proximity_score`, `is_shopping_season`.
+  - Helper Methods: `is_high_risk()`, `effective_demand_multiplier()` (capped at 2.5×), `describe_risks()`.
+- **`RiskAssessment`**: Extended with `weather_context: Optional[WeatherFestivalContext] = None` (fully backward-compatible).
+
+#### 3. Agent & Pipeline Updates
+- **`CsvInventoryDataLoader`**: Added `load_demand_context_fact()`, `load_festival_calendar()`, `load_location_climate_profile()`, and `build_weather_context_map()`.
+- **`InventoryRiskMonitoringService`**: Forecasted demand scales by `effective_demand_multiplier()`. Weather & festival risk reasons are appended to `risk_reasons`.
+- **`OrderCalculationService`**: Economic Order Quantity (EOQ) uses weather-adjusted demand. Order priority elevates to `URGENT` under extreme weather or high supply disruption.
+- **`PolicyEvaluationService`**: Tightens minimum supplier reliability threshold by `0.05` when `weather_supply_risk > 0.6`.
+- **`PipelineOrchestrator`**: Injects 8 weather context fields into `DemandForecastAgent` payloads and tracks `weather_context_loaded`.
+
+#### 4. Extended MODEL_FEATURES (33 features total)
+`FeatureEngineeringService.MODEL_FEATURES` includes 8 weather/festival features:
+- `weather_demand_multiplier`
+- `weather_severity_index`
+- `is_festival_day_int`
+- `festival_proximity_score`
+- `is_shopping_season_int`
+- `supply_disruption_risk`
+- `climate_anomaly_score`
+- `regional_demand_index`
+
+*Backward compatibility:* `to_model_matrix()` reindexes missing columns to `0` at inference time.
+
+#### 5. Backend FastAPI Endpoints (`api/v1/routers/weather.py`)
+Registered 3 new endpoints under `/api/v1/weather`:
+- **`GET /api/v1/weather/context`**: Query weather & festival demand facts (supports filtering by `product_id` & `location_id`).
+- **`GET /api/v1/weather/festivals`**: Query festival calendar entries (supports filtering by `location_id`).
+- **`GET /api/v1/weather/climate-profiles`**: Query location climate profiles (supports filtering by `location_id`).
+- **Updated `POST /api/v1/forecasting/predict` & `/predict/batch`**: Accepts optional weather and festival context fields in request payloads.
+
+#### 6. Test Suite & Verification
+- `pytest tests/test_weather_festival_schema.py tests/test_policy_agent.py`: **24/24 passed**.
+- `python tests/test_demand_forecast_agent.py`: **60/60 passed**.
+- `python tests/test_full_pipeline_integration.py`: **166,228 checks passed, 0 failed**.
+
+---
+
+## Makefile Target Reference
+
+| Target | Description |
+|---|---|
+| `make venv` | Create Python virtual environment (`.venv`) |
+| `make install` | Install all dependencies into `.venv` |
+| `make schema-init` | Initialize db6 CSV exports |
+| `make schema-validate` | Validate all CSV header counts |
+| `make data` | Generate synthetic training CSV |
+| `make prepare` | Clean data & engineer features |
+| `make train` | Train Hybrid SARIMAX + XGBoost model |
+| `make test` | Run all unit & integration test suites |
+| `make test-schema` | Run weather schema tests |
+| `make test-policy` | Run policy evaluation agent tests |
+| `make test-forecast` | Run demand forecast agent tests |
+| `make test-pipeline` | Run 5-agent pipeline integration tests |
+| `make lint` | Run flake8 style checks |
+| `make format` | Auto-format with black & isort |
+| `make run` | Execute full pipeline (Azure OFF) |
+| `make serve` | Start FastAPI development server (`uvicorn`) |
+| `make clean` | Clean build & test caches |
+| `make distclean` | Full clean including `.venv` and dataset |
+
