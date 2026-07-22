@@ -76,3 +76,6 @@ training_models/val_data.pkl
 training_models/hybrid_model.pkl
 training_models/model_metrics.json
 training_models/model_features.json
+
+# Large synthetic datasets
+synthetic_inventory_weather_region_v2_festival_demand.csv
