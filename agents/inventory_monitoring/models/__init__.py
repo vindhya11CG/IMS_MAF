@@ -5,6 +5,8 @@ from .inventory_models import (
     InventoryPosition,
     InventorySnapshot,
     RiskAssessment,
+    WeatherFestivalContext,
+    WeatherFestivalDemandRecord,
 )
 
 __all__ = [
@@ -12,4 +14,6 @@ __all__ = [
     "InventorySnapshot",
     "InventoryCalculationResult",
     "RiskAssessment",
+    "WeatherFestivalContext",
+    "WeatherFestivalDemandRecord",
 ]

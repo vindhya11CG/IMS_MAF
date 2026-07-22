@@ -136,14 +136,43 @@ class DataPreparation:
                     )
                     self.df.loc[mask, "daily_demand"] = clipped
 
+        # Phase 6: Weather & festival boolean columns — cast to int now so
+        # FeatureEngineeringService's bool→int conversion is idempotent on
+        # the already-numeric representation during batch training.
+        _bool_cols = [
+            "heatwave_flag", "coldwave_flag", "monsoon_flag",
+            "heavy_rain_flag", "snowfall_flag", "extreme_weather_flag",
+            "is_festival_day", "is_shopping_season",
+        ]
+        for col in _bool_cols:
+            if col in self.df.columns:
+                self.df[col] = (
+                    self.df[col]
+                    .astype(str)
+                    .str.lower()
+                    .isin(["true", "1", "yes"])
+                    .astype(int)
+                )
+
         self.df_clean = self.df.copy()
         print("\u2713 Data cleaned and validated")
+        _wx_cols_present = [c for c in _bool_cols if c in self.df_clean.columns]
+        if _wx_cols_present:
+            print(f"\u2713 Weather/festival columns detected and pre-processed: {_wx_cols_present}")
         return self
 
     def feature_engineering(self):
         """Create model features using the SHARED FeatureEngineeringService
         (the same class used at inference time), plus exploratory-only
-        lag/rolling features that are not fed to the deployed model."""
+        lag/rolling features that are not fed to the deployed model.
+
+        Phase 6: When the training CSV includes weather/festival columns
+        (is_festival_day, is_shopping_season, weather_demand_multiplier,
+        etc.), FeatureEngineeringService.execute() picks them up automatically
+        and derives the new MODEL_FEATURES (is_festival_day_int,
+        is_shopping_season_int, festival_proximity_score, ...) so no extra
+        code is required here.
+        """
         print("\n[FEATURES] Engineering features...")
 
         self.df_clean = self.engineer.execute(self.df_clean)
@@ -167,6 +196,16 @@ class DataPreparation:
         print(f"\u2713 Created temporal + inventory + exploratory lag/rolling features")
         print(f"\u2713 Total columns now: {len(self.df_clean.columns)}")
         print(f"\u2713 Model-facing feature columns: {FeatureEngineeringService.MODEL_FEATURES}")
+        # Report which weather/festival MODEL_FEATURES are actually populated
+        wx_model_feats = [
+            f for f in FeatureEngineeringService.MODEL_FEATURES
+            if "weather" in f or "festival" in f or "season" in f or "climate" in f or "regional" in f
+        ]
+        present = [f for f in wx_model_feats if f in self.df_clean.columns and self.df_clean[f].any()]
+        if present:
+            print(f"\u2713 Weather/festival MODEL_FEATURES populated: {present}")
+        else:
+            print("  (Weather/festival MODEL_FEATURES will default to 0 — LFS dataset not loaded)")
         return self
 
     def create_train_val_test_splits(self, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15):
@@ -223,6 +262,26 @@ class DataPreparation:
             "min_daily_demand": self.df_clean["daily_demand"].min(),
             "max_daily_demand": self.df_clean["daily_demand"].max(),
         }
+        # Phase 6: Add weather/festival coverage stats when available
+        if "is_festival_day" in self.df_clean.columns:
+            n = len(self.df_clean)
+            stats["festival_day_pct"] = round(
+                self.df_clean["is_festival_day"].astype(float).sum() / max(n, 1) * 100, 2
+            )
+        if "extreme_weather_flag" in self.df_clean.columns:
+            n = len(self.df_clean)
+            stats["extreme_weather_pct"] = round(
+                self.df_clean["extreme_weather_flag"].astype(float).sum() / max(n, 1) * 100, 2
+            )
+        if "is_shopping_season" in self.df_clean.columns:
+            n = len(self.df_clean)
+            stats["shopping_season_pct"] = round(
+                self.df_clean["is_shopping_season"].astype(float).sum() / max(n, 1) * 100, 2
+            )
+        if "weather_demand_multiplier" in self.df_clean.columns:
+            stats["avg_weather_demand_multiplier"] = round(
+                self.df_clean["weather_demand_multiplier"].mean(), 4
+            )
         return stats
 
 

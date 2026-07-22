@@ -1,4 +1,9 @@
-"""Policy evaluation service for supplier selection."""
+"""Policy evaluation service for supplier selection.
+
+Phase 6 extension: when ``weather_supply_risk`` is provided, the reliability
+threshold is tightened by 0.05 during high-weather-risk periods (>0.6).
+This is fully backward-compatible — the parameter defaults to 0.0.
+"""
 
 from __future__ import annotations
 
@@ -64,9 +69,14 @@ class PolicyEvaluationService(SupplierSelectionService):
         supplier_evaluation: SupplierEvaluation,
         policy: ProcurementPolicy,
         lowest_cost: float,
+        weather_supply_risk: float = 0.0,
     ) -> tuple[bool, List[str]]:
         """
         Evaluate if a supplier meets policy requirements.
+
+        Phase 6: when ``weather_supply_risk > 0.6`` the effective reliability
+        threshold is raised by 0.05 — during weather-driven supply disruption
+        periods, only more reliable suppliers should be selected.
         
         Returns:
             (is_compliant, list_of_issues)
@@ -81,8 +91,17 @@ class PolicyEvaluationService(SupplierSelectionService):
                     f"Cost variance {cost_variance:.1f}% exceeds policy limit of {policy.max_supplier_cost_variance}%"
                 )
 
-        # Check reliability
-        if supplier_evaluation.reliability_score < policy.min_reliability_score:
+        # Check reliability — tighten threshold during high weather supply risk
+        effective_min_reliability = policy.min_reliability_score
+        if weather_supply_risk > 0.6:
+            effective_min_reliability = min(1.0, policy.min_reliability_score + 0.05)
+            if supplier_evaluation.reliability_score < effective_min_reliability:
+                issues.append(
+                    f"Reliability score {supplier_evaluation.reliability_score:.2f} below "
+                    f"weather-adjusted minimum {effective_min_reliability:.2f} "
+                    f"(base: {policy.min_reliability_score}, weather_supply_risk: {weather_supply_risk:.2f})"
+                )
+        elif supplier_evaluation.reliability_score < policy.min_reliability_score:
             issues.append(
                 f"Reliability score {supplier_evaluation.reliability_score:.2f} below minimum {policy.min_reliability_score}"
             )
@@ -105,6 +124,7 @@ class PolicyEvaluationService(SupplierSelectionService):
         supplier_evaluation: SupplierEvaluation,
         policy_name: str = "STANDARD",
         lowest_cost: float = 0.0,
+        weather_supply_risk: float = 0.0,
     ) -> SupplierEvaluation:
         """
         Evaluate supplier against policy.
@@ -112,7 +132,12 @@ class PolicyEvaluationService(SupplierSelectionService):
         Returns updated SupplierEvaluation with compliance info.
         """
         policy = self.get_policy(policy_name)
-        is_compliant, issues = self.evaluate_supplier(supplier_evaluation, policy, lowest_cost)
+        is_compliant, issues = self.evaluate_supplier(
+            supplier_evaluation,
+            policy,
+            lowest_cost,
+            weather_supply_risk=weather_supply_risk,
+        )
 
         supplier_evaluation.policy_compliance = is_compliant
         supplier_evaluation.compliance_issues = issues

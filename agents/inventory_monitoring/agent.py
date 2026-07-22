@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from utils.csv_loader import CsvInventoryDataLoader
 from config import AzureOpenAIClient, AzureOpenAIConfig
-from .models import InventoryCalculationResult, InventoryPosition, RiskAssessment
+from .models import InventoryCalculationResult, InventoryPosition, RiskAssessment, WeatherFestivalContext
 from .services import (
     AgentService,
     EventSnapshotService,
@@ -17,7 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 class InventoryMonitoringAgent(AgentService):
-    """Agent core for inventory monitoring and risk analysis."""
+    """Agent core for inventory monitoring and risk analysis.
+
+    Phase 6 extension: loads weather/festival context from the db6 tables
+    (or the LFS dataset when available) and feeds it into the risk
+    monitoring service so weather/festival signals influence demand
+    estimates and risk assessments.
+    """
 
     def __init__(
         self,
@@ -54,10 +60,17 @@ class InventoryMonitoringAgent(AgentService):
             ]
             in_transit = self.loader.load_in_transit_inventory()
             
+            # Load weather/festival context (Phase 6)
+            logger.info("\n[PHASE 1b] Loading weather/festival context...")
+            weather_context_map = self.loader.build_weather_context_map()
+            weather_context_loaded = len(weather_context_map)
+            logger.info(f"  Weather context entries loaded: {weather_context_loaded}")
+
             logger.info(f"\nData Summary:")
             logger.info(f"  Positions: {len(positions)}")
             logger.info(f"  Valid Snapshots: {len(valid_snapshots)}")
             logger.info(f"  In-Transit Items: {len(in_transit)}")
+            logger.info(f"  Weather Context Entries: {weather_context_loaded}")
 
             # Phase 2: Calculate inventory
             logger.info("\n[PHASE 2] Calculating current inventory...")
@@ -72,6 +85,7 @@ class InventoryMonitoringAgent(AgentService):
                 calculation_results,
                 in_transit,
                 forecasted_demand,
+                weather_context_map=weather_context_map if weather_context_loaded > 0 else None,
             )
             logger.info(f"  Risk Assessments: {len(assessments)}")
 
@@ -101,6 +115,7 @@ class InventoryMonitoringAgent(AgentService):
                 "assessments": assessments,
                 "summary": summary,
                 "azure_analysis": azure_analysis,
+                "weather_context_loaded": weather_context_loaded,
             }
         except Exception as e:
             logger.error(f"Error in inventory monitoring workflow: {e}", exc_info=True)
@@ -112,12 +127,13 @@ class InventoryMonitoringAgent(AgentService):
         prompt_lines = [
             "Evaluate the following inventory risk conditions and provide a concise recommendation.",
             "Include the likely cause of risk and the next action for the replenishment planning agent.",
+            "Weather and festival context is included where available — factor these into your analysis.",
             "",
             "Top risk records:",
         ]
 
         for assessment in top_risks:
-            prompt_lines.append(
+            line = (
                 f"SKU {assessment.sku_id} @ Location {assessment.location_id}: "
                 f"current_stock={assessment.current_stock}, "
                 f"safety_stock={assessment.safety_stock}, "
@@ -127,6 +143,16 @@ class InventoryMonitoringAgent(AgentService):
                 f"projected_stock={assessment.projected_stock}, "
                 f"risk_reasons={assessment.risk_reasons}"
             )
+            # Append weather context summary if available
+            wx = assessment.weather_context
+            if wx is not None:
+                line += (
+                    f", weather_multiplier={wx.effective_demand_multiplier():.2f}"
+                    f", severity={wx.weather_severity_index:.2f}"
+                    f", festival={wx.is_festival_day}"
+                    f", season={wx.season or 'N/A'}"
+                )
+            prompt_lines.append(line)
 
         return "\n".join(prompt_lines)
 
@@ -148,12 +174,17 @@ class InventoryMonitoringAgent(AgentService):
         if not detected:
             return "No inventory risk detected across monitored positions."
         
+        wx_risks = [a for a in detected if a.weather_context is not None and a.weather_context.is_high_risk()]
         actions = {a.recommended_action for a in detected}
         summary_lines = [
             f"Inventory Risk Summary: {len(detected)} positions at risk out of {len(assessments)} monitored",
-            "",
-            "Recommended Actions:",
         ]
+        if wx_risks:
+            summary_lines.append(
+                f"  Weather/Festival-triggered risks: {len(wx_risks)} positions"
+            )
+        summary_lines.append("")
+        summary_lines.append("Recommended Actions:")
         for action in sorted(actions):
             summary_lines.append(f"- {action}")
         

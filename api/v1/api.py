@@ -1,6 +1,16 @@
 from fastapi import APIRouter
-from .routers import agent, inventory, risks, orders, products, purchase_history, locations, simulation
-from .routers import forecasting
+from .routers import (
+    agent,
+    forecasting,
+    inventory,
+    locations,
+    orders,
+    products,
+    purchase_history,
+    risks,
+    simulation,
+    weather,
+)
 
 api_router = APIRouter()
 
@@ -19,6 +29,13 @@ api_router.include_router(
     simulation.router,
     prefix="/simulation",
     tags=["Simulation"],
+)
+
+# --- Weather & Festival Context endpoints ---
+api_router.include_router(
+    weather.router,
+    prefix="/weather",
+    tags=["Weather & Festival Context"],
 )
 
 # --- Demand Forecasting endpoints ---

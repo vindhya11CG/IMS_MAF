@@ -196,6 +196,15 @@ class PredictRequest(BaseModel):
     category_id: int = Field(0, description="Product category identifier.", ge=0)
     velocity_class_id: int = Field(0, description="Velocity class identifier.", ge=0)
     horizon_days: int = Field(14, description="Forecast horizon in days.", ge=1, le=365)
+    # Phase 6: Weather & Festival fields
+    weather_demand_multiplier: Optional[float] = Field(1.0, description="Weather-based demand multiplier.", ge=0.0)
+    weather_severity_index: Optional[float] = Field(0.0, description="Weather severity index (0.0 to 1.0).", ge=0.0, le=1.0)
+    is_festival_day: Optional[bool] = Field(False, description="Whether today is a festival day.")
+    festival_proximity_score: Optional[float] = Field(0.0, description="Proximity score to the nearest festival (0.0 to 1.0).", ge=0.0, le=1.0)
+    is_shopping_season: Optional[bool] = Field(False, description="Whether an active shopping season is underway.")
+    supply_disruption_risk: Optional[float] = Field(0.0, description="Supply disruption risk score (0.0 to 1.0).", ge=0.0, le=1.0)
+    climate_anomaly_score: Optional[float] = Field(0.0, description="Climate anomaly score (0.0 to 1.0).", ge=0.0, le=1.0)
+    regional_demand_index: Optional[float] = Field(1.0, description="Regional demand index multiplier.", ge=0.0)
 
 
 class PredictionInterval(BaseModel):
@@ -243,6 +252,15 @@ class BatchPredictItem(BaseModel):
     season_multiplier: float = Field(1.0, ge=0.0)
     category_id: int = Field(0, ge=0)
     velocity_class_id: int = Field(0, ge=0)
+    # Phase 6: Weather & Festival fields
+    weather_demand_multiplier: Optional[float] = Field(1.0, ge=0.0)
+    weather_severity_index: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+    is_festival_day: Optional[bool] = Field(False)
+    festival_proximity_score: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+    is_shopping_season: Optional[bool] = Field(False)
+    supply_disruption_risk: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+    climate_anomaly_score: Optional[float] = Field(0.0, ge=0.0, le=1.0)
+    regional_demand_index: Optional[float] = Field(1.0, ge=0.0)
 
 
 class BatchPredictRequest(BaseModel):

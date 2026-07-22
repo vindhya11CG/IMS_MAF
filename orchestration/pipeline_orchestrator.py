@@ -10,7 +10,7 @@ from agents import (
     ReplenishmentPlanningAgent,
     SupplierSelectionAgent,
 )
-from agents.inventory_monitoring.models import RiskAssessment
+from agents.inventory_monitoring.models import RiskAssessment, WeatherFestivalContext
 from demand_forecast_agent import DemandForecastAgent
 from utils.csv_loader import CsvInventoryDataLoader
 from config import AzureOpenAIClient, AzureOpenAIConfig
@@ -124,6 +124,19 @@ class PipelineOrchestrator:
         for key in ("avg_retail_price", "category_id", "velocity_class_id"):
             if key in product:
                 payload[key] = product[key]
+
+        # --- Phase 6: Inject weather/festival context into forecast payload ---
+        wx: Optional[WeatherFestivalContext] = assessment.weather_context
+        if wx is not None:
+            payload["weather_demand_multiplier"] = wx.weather_demand_multiplier
+            payload["weather_severity_index"] = wx.weather_severity_index
+            payload["is_festival_day"] = wx.is_festival_day
+            payload["festival_proximity_score"] = wx.festival_proximity_score
+            payload["is_shopping_season"] = wx.is_shopping_season
+            payload["supply_disruption_risk"] = wx.supply_disruption_risk
+            payload["climate_anomaly_score"] = wx.climate_anomaly_score
+            payload["regional_demand_index"] = wx.regional_demand_index
+
         return payload
  
     def _enhance_assessment_with_ml_forecast(
@@ -216,6 +229,7 @@ class PipelineOrchestrator:
         # Step 1: Inventory Monitoring (unmodified agent)
         monitoring_result = self.inventory_agent.execute()
         assessments: List[RiskAssessment] = monitoring_result["assessments"]
+        weather_context_loaded: int = monitoring_result.get("weather_context_loaded", 0)
  
         risky = [a for a in assessments if a.risk_detected]
         capped = risky[: self.max_ml_forecast_calls]
@@ -259,11 +273,12 @@ class PipelineOrchestrator:
  
         return {
             "monitoring": monitoring_result,
+            "enhanced_assessments": enhanced_assessments,
             "assessments_enhanced_with_ml": enhanced_count,
             "assessments_ml_forecast_failed": failed_count,
-            # NEW - see module docstring "CHANGE IN THIS PASS"
             "demand_forecast_details": demand_forecast_details,
             "demand_forecast_skipped_due_to_cap": skipped_due_to_cap,
+            "weather_context_loaded": weather_context_loaded,
             "replenishment": replenishment_result,
             "supplier_selection": supplier_result,
         }
@@ -277,5 +292,6 @@ if __name__ == "__main__":
     print(f"Assessments enhanced with ML forecast: {result['assessments_enhanced_with_ml']}")
     print(f"ML forecast failures (fell back to heuristic): {result['assessments_ml_forecast_failed']}")
     print(f"Risky rows skipped due to MAX_ML_FORECAST_CALLS cap: {result['demand_forecast_skipped_due_to_cap']}")
+    print(f"Weather context entries loaded: {result['weather_context_loaded']}")
     print(f"Replenishment orders generated: {len(result['replenishment']['orders'])}")
     print(f"Supplier selections made: {len(result['supplier_selection']['selections'])}")

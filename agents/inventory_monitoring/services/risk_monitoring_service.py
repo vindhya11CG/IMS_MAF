@@ -3,16 +3,33 @@ from __future__ import annotations
 import logging
 import math
 from collections import defaultdict
-from typing import Iterable, List
+from typing import Dict, Iterable, List, Optional
 
-from ..models import InventoryPosition, InventoryCalculationResult, RiskAssessment
+from ..models import (
+    InventoryPosition,
+    InventoryCalculationResult,
+    RiskAssessment,
+    WeatherFestivalContext,
+)
 from .base_service import AgentService
 
 logger = logging.getLogger(__name__)
 
 
 class InventoryRiskMonitoringService(AgentService):
-    """Service that evaluates stock risk for inventory positions."""
+    """Service that evaluates stock risk for inventory positions.
+
+    Phase 6 extension: when a ``weather_context_map`` is supplied, each
+    assessment is enriched with weather/festival signals that:
+    - Scale the effective forecasted demand by the weather demand multiplier.
+    - Add risk reason strings for extreme weather or festival proximity.
+    - Attach the ``WeatherFestivalContext`` to the ``RiskAssessment`` so
+      downstream agents (replenishment planning, supplier selection) can
+      use it without re-loading the dataset.
+
+    Fully backward-compatible: ``weather_context_map=None`` (the default)
+    leaves the assessment logic identical to the original pre-weather version.
+    """
 
     def __init__(self) -> None:
         super().__init__(name="InventoryRiskMonitoringService")
@@ -23,6 +40,7 @@ class InventoryRiskMonitoringService(AgentService):
         calculation_results: Iterable[InventoryCalculationResult],
         in_transit_data: Iterable[dict],
         forecasted_demand: dict[tuple[int, int], int],
+        weather_context_map: Optional[Dict[tuple[int, int], WeatherFestivalContext]] = None,
     ) -> List[RiskAssessment]:
         """Execute risk assessment."""
         return self.assess_risk(
@@ -30,6 +48,7 @@ class InventoryRiskMonitoringService(AgentService):
             list(calculation_results),
             list(in_transit_data),
             forecasted_demand,
+            weather_context_map=weather_context_map,
         )
 
     def assess_risk(
@@ -38,6 +57,7 @@ class InventoryRiskMonitoringService(AgentService):
         calculation_results: List[InventoryCalculationResult],
         in_transit_data: List[dict],
         forecasted_demand: dict[tuple[int, int], int],
+        weather_context_map: Optional[Dict[tuple[int, int], WeatherFestivalContext]] = None,
     ) -> List[RiskAssessment]:
         """Assess inventory risk for all positions."""
         transit_map = self._group_in_transit_quantities(in_transit_data)
@@ -45,6 +65,7 @@ class InventoryRiskMonitoringService(AgentService):
             (result.sku_id, result.location_id): result
             for result in calculation_results
         }
+        wx_map = weather_context_map or {}
 
         assessments: List[RiskAssessment] = []
         for position in positions:
@@ -61,7 +82,16 @@ class InventoryRiskMonitoringService(AgentService):
             )).current_stock
 
             in_transit_qty = transit_map.get(key, 0)
-            forecast = forecasted_demand.get(key, 0)
+            base_forecast = forecasted_demand.get(key, 0)
+
+            # --- Weather/festival enrichment ---
+            wx_ctx = wx_map.get(key)
+            if wx_ctx is not None:
+                effective_multiplier = wx_ctx.effective_demand_multiplier()
+                forecast = int(math.ceil(base_forecast * effective_multiplier))
+            else:
+                forecast = base_forecast
+
             projected_stock = current_stock + in_transit_qty - forecast
             risk_reasons: list[str] = []
 
@@ -71,6 +101,22 @@ class InventoryRiskMonitoringService(AgentService):
                 risk_reasons.append("Current stock is at or below safety stock.")
             if projected_stock < position.safety_stock_qty:
                 risk_reasons.append("Projected stock falls below safety stock after forecasted demand.")
+
+            # Weather/festival risk reasons
+            if wx_ctx is not None:
+                wx_risk_reasons = wx_ctx.describe_risks()
+                risk_reasons.extend(wx_risk_reasons)
+                # High weather/festival risk can trigger risk_detected even if
+                # stock levels appear adequate, because demand may spike before
+                # the next replenishment window.
+                if wx_ctx.is_high_risk() and not any(
+                    r.startswith("Current stock") or r.startswith("Projected stock")
+                    for r in risk_reasons
+                ):
+                    risk_reasons.append(
+                        "Weather/festival conditions indicate elevated demand or supply disruption "
+                        "risk — pre-emptive replenishment recommended."
+                    )
 
             risk_detected = len(risk_reasons) > 0
             recommended_action = (
@@ -91,6 +137,7 @@ class InventoryRiskMonitoringService(AgentService):
                 risk_detected=risk_detected,
                 risk_reasons=risk_reasons,
                 recommended_action=recommended_action,
+                weather_context=wx_ctx,
             )
             assessments.append(assessment)
             
@@ -98,9 +145,13 @@ class InventoryRiskMonitoringService(AgentService):
                 logger.warning(
                     f"Risk detected for SKU {position.sku_id} @ Location {position.location_id}: "
                     f"current_stock={current_stock}, safety_stock={position.safety_stock_qty}"
+                    + (f", weather_multiplier={wx_ctx.effective_demand_multiplier():.2f}" if wx_ctx else "")
                 )
 
         logger.info(f"Risk assessment completed for {len(assessments)} positions")
+        wx_enriched = sum(1 for a in assessments if a.weather_context is not None)
+        if wx_enriched:
+            logger.info(f"  {wx_enriched} assessments enriched with weather/festival context")
         return assessments
 
     def estimate_forecasted_demand(

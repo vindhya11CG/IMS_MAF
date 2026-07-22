@@ -9,10 +9,12 @@ __pycache__/
 
 # Virtual environment
 venv/
+.venv/
 .env/
 
 # VS Code settings
 .vscode/
+.history/
 
 # Environment variables
 .env

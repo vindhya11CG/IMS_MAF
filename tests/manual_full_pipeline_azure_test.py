@@ -103,6 +103,42 @@ def main():
     check("monitoring azure_analysis is populated", bool(monitoring.get("azure_analysis")))
  
     # ------------------------------------------------------------------
+    # [1b/4] Weather & Festival Context (Phase 6)
+    # ------------------------------------------------------------------
+    section("[1b/4] WEATHER & FESTIVAL CONTEXT  (Phase 6 enrichment)")
+    weather_context_loaded = result.get("weather_context_loaded", 0)
+    print(f"  Weather context entries loaded : {weather_context_loaded:,}")
+ 
+    # Report assessments with weather context
+    wx_enriched = [a for a in assessments if getattr(a, "weather_context", None) is not None]
+    wx_high_risk = [a for a in wx_enriched if a.weather_context.is_high_risk()]
+    wx_festival = [a for a in wx_enriched if a.weather_context.is_festival_day]
+    print(f"  Assessments with weather context: {len(wx_enriched):,}")
+    print(f"  High weather/festival risk       : {len(wx_high_risk):,}")
+    print(f"  Active festival day positions    : {len(wx_festival):,}")
+ 
+    # Top 3 weather-triggered risk reasons
+    wx_reasons: list[str] = []
+    for a in wx_high_risk[:5]:
+        for r in a.risk_reasons:
+            if any(kw in r.lower() for kw in ["weather", "festival", "extreme", "monsoon", "heat", "cold"]):
+                if r not in wx_reasons:
+                    wx_reasons.append(r)
+    if wx_reasons:
+        print("  Top weather/festival risk reasons:")
+        for r in wx_reasons[:3]:
+            print(f"    - {snippet(r, 120)}")
+ 
+    check(
+        "weather_context_loaded key present in pipeline result",
+        "weather_context_loaded" in result,
+    )
+    check(
+        "all assessments have weather_context attribute (None or WeatherFestivalContext)",
+        all(hasattr(a, "weather_context") for a in assessments),
+    )
+ 
+    # ------------------------------------------------------------------
     # [2/4] Replenishment Planning
     # ------------------------------------------------------------------
     section("[2/4] REPLENISHMENT PLANNING  (Phase 4)")

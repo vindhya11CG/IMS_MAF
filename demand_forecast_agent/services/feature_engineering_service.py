@@ -22,6 +22,20 @@ Every feature below is intentionally something computable from a SINGLE ROW
 has available. Lag/rolling features were removed rather than "faked" at
 inference, since silently filling them with 0 would quietly bias
 predictions without anyone noticing.
+
+Phase 6 Extension
+------------------
+Added 8 weather/festival features to MODEL_FEATURES:
+  - weather_demand_multiplier, weather_severity_index
+  - is_festival_day_int, festival_proximity_score, is_shopping_season_int
+  - supply_disruption_risk, climate_anomaly_score, regional_demand_index
+
+These are all single-row-computable (no lookback needed). When the payload
+does not contain them, `to_model_matrix()` fills them with 0 via `reindex`,
+so existing payloads without weather data continue to work exactly as before.
+
+IMPORTANT: After this change, any existing trained model (hybrid_model.pkl)
+must be retrained (`make train`) because the feature vector shape has changed.
 """
 from __future__ import annotations
 
@@ -47,6 +61,15 @@ class FeatureEngineeringService:
         "order_fulfillment_rate", "total_orders_last_month", "turnover_ratio",
         "demand_std_dev", "lead_time_days", "season_multiplier",
         "category_id", "velocity_class_id",
+        # --- Phase 6: Weather & Festival features ---
+        "weather_demand_multiplier",
+        "weather_severity_index",
+        "is_festival_day_int",
+        "festival_proximity_score",
+        "is_shopping_season_int",
+        "supply_disruption_risk",
+        "climate_anomaly_score",
+        "regional_demand_index",
     ]
 
     def execute(self, df):
@@ -106,6 +129,35 @@ class FeatureEngineeringService:
         if "is_promotional" in df.columns:
             df["is_promotional_int"] = (
                 df["is_promotional"]
+                .astype(str)
+                .str.lower()
+                .isin(["true", "1", "yes"])
+                .astype(int)
+            )
+
+        # -----------------------
+        # Weather & Festival features (Phase 6)
+        # -----------------------
+        # weather_demand_multiplier: pass through if present; defaults to 0 at reindex
+        # weather_severity_index: pass through if present
+        # supply_disruption_risk: pass through if present
+        # climate_anomaly_score: pass through if present
+        # regional_demand_index: pass through if present
+        # festival_proximity_score: pass through if present
+
+        # Boolean festival/shopping season flags -> numeric (same pattern as is_promotional_int)
+        if "is_festival_day" in df.columns:
+            df["is_festival_day_int"] = (
+                df["is_festival_day"]
+                .astype(str)
+                .str.lower()
+                .isin(["true", "1", "yes"])
+                .astype(int)
+            )
+
+        if "is_shopping_season" in df.columns:
+            df["is_shopping_season_int"] = (
+                df["is_shopping_season"]
                 .astype(str)
                 .str.lower()
                 .isin(["true", "1", "yes"])

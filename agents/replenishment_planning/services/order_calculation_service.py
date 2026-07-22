@@ -1,4 +1,10 @@
-"""Order calculation service for replenishment planning."""
+"""Order calculation service for replenishment planning.
+
+Phase 6 extension: when a RiskAssessment carries a WeatherFestivalContext,
+the EOQ calculation uses the effective demand multiplier to scale annual
+demand, and the order priority can be elevated to URGENT for extreme
+weather or high supply-disruption risk regardless of stock level.
+"""
 
 from __future__ import annotations
 
@@ -87,11 +93,17 @@ class OrderCalculationService(ReplenishmentService):
     ) -> ReplenishmentOrder:
         """Generate a replenishment order from a risk assessment and supplier info."""
         
-        # Estimate annual demand
-        annual_demand = self.estimate_annual_demand(assessment.forecasted_demand)
+        # Estimate annual demand — optionally scaled by weather/festival context
+        wx = assessment.weather_context
+        demand_multiplier = 1.0
+        if wx is not None:
+            demand_multiplier = wx.effective_demand_multiplier()
+
+        base_annual_demand = self.estimate_annual_demand(assessment.forecasted_demand)
+        adjusted_annual_demand = max(1, int(base_annual_demand * demand_multiplier))
         
-        # Calculate EOQ
-        eoq = self.calculate_eoq(annual_demand, supplier.unit_cost)
+        # Calculate EOQ using weather-adjusted demand
+        eoq = self.calculate_eoq(adjusted_annual_demand, supplier.unit_cost)
         
         # Order quantity is max of EOQ and minimum supplier requirement
         order_qty = max(eoq, supplier.min_order_qty)
@@ -99,12 +111,17 @@ class OrderCalculationService(ReplenishmentService):
         # Calculate costs
         total_cost = order_qty * supplier.unit_cost
         
-        # Determine priority
+        # Determine priority — weather can elevate to URGENT
         priority = self.calculate_order_priority(
             assessment.current_stock,
             assessment.reorder_point,
             assessment.safety_stock,
         )
+        if wx is not None and priority != "URGENT":
+            if wx.extreme_weather_flag or wx.supply_disruption_risk > 0.7:
+                priority = "URGENT"
+            elif wx.is_high_risk() and priority == "MEDIUM":
+                priority = "HIGH"
         
         # Build reasoning
         reasoning = (
@@ -113,6 +130,16 @@ class OrderCalculationService(ReplenishmentService):
             f"EOQ: {eoq} + supplier min: {supplier.min_order_qty} = {order_qty} units. "
             f"Lead time: {supplier.lead_time_days} days. Cost: ${total_cost:.2f}"
         )
+        if wx is not None and demand_multiplier != 1.0:
+            reasoning += (
+                f" [Weather/Festival: demand multiplier {demand_multiplier:.2f}×, "
+                f"severity={wx.weather_severity_index:.2f}"
+            )
+            if wx.is_festival_day:
+                reasoning += f", festival_day=True (proximity={wx.festival_proximity_score:.2f})"
+            if wx.extreme_weather_flag:
+                reasoning += ", EXTREME_WEATHER"
+            reasoning += "]"
         
         return ReplenishmentOrder(
             order_id=order_id,

@@ -18,7 +18,8 @@ What it covers:
                           the DB3 inventory_positions column names.
   2. InputValidatorService  - valid payload, missing fields, negative values
   3. FeatureEngineeringService - dict payload AND batch DataFrame produce the
-                          same derived columns; train/inference parity.
+                          same derived columns; train/inference parity;
+                          Phase 6: 8 new weather/festival MODEL_FEATURES verified.
   4. ModelLoaderService  - loads + singleton-caches the trained model
   5. ForecastService     - forecast succeeds for a product WITH a trained
                           SARIMAX component and one WITHOUT (falls back to
@@ -32,6 +33,7 @@ What it covers:
  11. End-to-end DemandForecastWorkflow.run() for several realistic
                           payloads pulled from an inventory_positions-shaped
                           sample, plus one intentionally invalid payload.
+                          Phase 6: includes a weather-enriched payload test.
  12. Downstream contract check - flags field-name differences between what
                           this agent outputs and what the other agents'
                           dataclasses expect, so integration doesn't break
@@ -133,10 +135,70 @@ def run():
                 "month_sin", "month_cos", "is_promotional_int"]:
         check(f"single-row engineered column '{col}' present", col in single.columns)
 
+    # Phase 6: verify 8 new weather/festival features are in MODEL_FEATURES
+    _WX_FEATURES = [
+        "weather_demand_multiplier",
+        "weather_severity_index",
+        "is_festival_day_int",
+        "festival_proximity_score",
+        "is_shopping_season_int",
+        "supply_disruption_risk",
+        "climate_anomaly_score",
+        "regional_demand_index",
+    ]
+    for feat in _WX_FEATURES:
+        check(
+            f"weather/festival feature '{feat}' in MODEL_FEATURES",
+            feat in FeatureEngineeringService.MODEL_FEATURES,
+            f"MODEL_FEATURES={FeatureEngineeringService.MODEL_FEATURES}",
+        )
+
+    # Phase 6: verify weather payload fields are derived correctly
+    wx_payload = dict(
+        good_payload,
+        avg_retail_price=199.0,
+        annual_units_max=90000,
+        is_promotional=False,
+        is_festival_day=True,
+        is_shopping_season=True,
+        festival_proximity_score=0.75,
+        weather_demand_multiplier=1.35,
+        weather_severity_index=0.55,
+        supply_disruption_risk=0.30,
+        climate_anomaly_score=0.20,
+        regional_demand_index=1.10,
+    )
+    wx_single = fe.execute(wx_payload)
+    check(
+        "is_festival_day_int derived from is_festival_day=True",
+        int(wx_single["is_festival_day_int"].iloc[0]) == 1,
+    )
+    check(
+        "is_shopping_season_int derived from is_shopping_season=True",
+        int(wx_single["is_shopping_season_int"].iloc[0]) == 1,
+    )
+    check(
+        "weather_demand_multiplier passes through correctly",
+        abs(float(wx_single["weather_demand_multiplier"].iloc[0]) - 1.35) < 0.001,
+    )
+    wx_matrix = fe.to_model_matrix(wx_single)
+    check(
+        "weather-enriched to_model_matrix preserves weather feature values",
+        abs(float(wx_matrix["weather_demand_multiplier"].iloc[0]) - 1.35) < 0.001,
+    )
+    check(
+        "weather-enriched matrix fills absent weather columns with 0 (not NaN)",
+        not wx_matrix.isnull().values.any(),
+    )
+
     matrix = fe.to_model_matrix(single)
     check(
         "to_model_matrix produces the exact MODEL_FEATURES column set/order",
         list(matrix.columns) == FeatureEngineeringService.MODEL_FEATURES,
+    )
+    check(
+        "to_model_matrix fills absent weather columns with 0 for non-weather payload",
+        float(matrix["weather_demand_multiplier"].iloc[0]) == 0.0,
     )
 
     if os.path.exists(csv_path):
@@ -266,6 +328,40 @@ def run():
             f"end-to-end forecast for product_id={pos['product_id']}",
             "forecast" in result and hasattr(result["forecast"], "forecasted_demand"),
             str(result),
+        )
+
+    # Phase 6: weather-enriched end-to-end payload
+    print("\n--- 11b. End-to-end DemandForecastWorkflow with weather context ---")
+    wx_e2e_payload = {
+        "product_id": 1,
+        "location_id": 1,
+        "on_hand_qty": 67,
+        "allocated_qty": 12,
+        "safety_stock_qty": 11,
+        "reorder_point_qty": 17,
+        "avg_retail_price": 199.0,
+        "annual_units_max": 90000,
+        "is_promotional": False,
+        # Weather/festival context fields
+        "weather_demand_multiplier": 1.50,
+        "weather_severity_index": 0.72,
+        "is_festival_day": True,
+        "festival_proximity_score": 0.88,
+        "is_shopping_season": True,
+        "supply_disruption_risk": 0.45,
+        "climate_anomaly_score": 0.30,
+        "regional_demand_index": 1.15,
+    }
+    wx_result = agent.execute(wx_e2e_payload, horizon=14)
+    check(
+        "weather-enriched payload: forecast completes without error",
+        "forecast" in wx_result and hasattr(wx_result.get("forecast"), "forecasted_demand"),
+        str(wx_result),
+    )
+    if "forecast" in wx_result and hasattr(wx_result["forecast"], "forecasted_demand"):
+        check(
+            "weather-enriched forecast demand is a non-negative integer",
+            wx_result["forecast"].forecasted_demand >= 0,
         )
 
     invalid_result = asyncio.run(DemandForecastWorkflow().run({"product_id": 1}, horizon=14))

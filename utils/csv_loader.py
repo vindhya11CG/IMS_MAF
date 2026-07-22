@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Dict, Iterable, List, Optional
 from .parsing import parse_bool, parse_float, parse_int, parse_optional_int
 
 if TYPE_CHECKING:
-    from agents.inventory_monitoring.models.inventory_models import InventoryPosition, WeatherFestivalDemandRecord
+    from agents.inventory_monitoring.models.inventory_models import (
+        InventoryPosition,
+        WeatherFestivalContext,
+        WeatherFestivalDemandRecord,
+    )
 
 
 def parse_optional_float(value: Optional[str | int | float]) -> Optional[float]:
@@ -572,3 +576,269 @@ class CsvInventoryDataLoader:
                 logger.error(f"Error parsing supplier risk profile row: {e}")
                 continue
         return profiles
+
+    # ============================================================================
+    # DB6: Weather, Festival & Regional Demand Context
+    # ============================================================================
+
+    def load_demand_context_fact(self) -> List[Dict]:
+        """Load the demand context fact table from db6 (weather + festival signals).
+
+        This table is the synthetic schema-equivalent of
+        synthetic_inventory_weather_region_v2_festival_demand.csv.  When the
+        real LFS file is available it supersedes this table (see
+        load_weather_festival_dataset).  This loader exists so the full
+        pipeline and tests can run in offline/dev mode without the 469 MB
+        LFS asset.
+        """
+        rows = self._read_rows(
+            self.root_dir / "db6_csv_export" / "demand_context_fact.csv"
+        )
+        records = []
+        for row in rows:
+            try:
+                record = {
+                    "date": row.get("date", "").strip(),
+                    "product_id": parse_int(row.get("product_id") or row.get("sku_id")),
+                    "location_id": parse_int(row.get("location_id")),
+                    "temperature_c": parse_optional_float(row.get("temperature_c")),
+                    "feels_like_c": parse_optional_float(row.get("feels_like_c")),
+                    "humidity_pct": parse_optional_float(row.get("humidity_pct")),
+                    "rainfall_mm": parse_optional_float(row.get("rainfall_mm")),
+                    "snowfall_cm": parse_optional_float(row.get("snowfall_cm")),
+                    "wind_speed_kmh": parse_optional_float(row.get("wind_speed_kmh")),
+                    "uv_index": parse_optional_float(row.get("uv_index")),
+                    "cloud_cover_pct": parse_optional_float(row.get("cloud_cover_pct")),
+                    "pressure_hpa": parse_optional_float(row.get("pressure_hpa")),
+                    "visibility_km": parse_optional_float(row.get("visibility_km")),
+                    "heatwave_flag": parse_bool(row.get("heatwave_flag")),
+                    "coldwave_flag": parse_bool(row.get("coldwave_flag")),
+                    "monsoon_flag": parse_bool(row.get("monsoon_flag")),
+                    "heavy_rain_flag": parse_bool(row.get("heavy_rain_flag")),
+                    "snowfall_flag": parse_bool(row.get("snowfall_flag")),
+                    "extreme_weather_flag": parse_bool(row.get("extreme_weather_flag")),
+                    "temperature_deviation": parse_optional_float(row.get("temperature_deviation")),
+                    "rainfall_deviation": parse_optional_float(row.get("rainfall_deviation")),
+                    "weather_severity_index": parse_optional_float(row.get("weather_severity_index")),
+                    "weather_demand_multiplier": parse_optional_float(row.get("weather_demand_multiplier")),
+                    "weather_supply_risk_score": parse_optional_float(row.get("weather_supply_risk_score")),
+                    "climate_anomaly_score": parse_optional_float(row.get("climate_anomaly_score")),
+                    "weather_confidence_score": parse_optional_float(row.get("weather_confidence_score")),
+                    "weather_adjusted_demand": parse_optional_float(row.get("weather_adjusted_demand")),
+                    "regional_adjusted_demand": parse_optional_float(row.get("regional_adjusted_demand")),
+                    "weather_adjusted_safety_stock": parse_optional_float(row.get("weather_adjusted_safety_stock")),
+                    "weather_adjusted_reorder_point": parse_optional_float(row.get("weather_adjusted_reorder_point")),
+                    "demand_volatility_score": parse_optional_float(row.get("demand_volatility_score")),
+                    "supply_disruption_risk": parse_optional_float(row.get("supply_disruption_risk")),
+                    "stockout_weather_risk": parse_optional_float(row.get("stockout_weather_risk")),
+                    "inventory_weather_pressure": parse_optional_float(row.get("inventory_weather_pressure")),
+                    "regional_inventory_risk": parse_optional_float(row.get("regional_inventory_risk")),
+                    "is_festival_day": parse_bool(row.get("is_festival_day")),
+                    "days_to_next_festival": parse_optional_float(row.get("days_to_next_festival")),
+                    "days_since_last_festival": parse_optional_float(row.get("days_since_last_festival")),
+                    "festival_proximity_score": parse_optional_float(row.get("festival_proximity_score")),
+                    "is_shopping_season": parse_bool(row.get("is_shopping_season")),
+                    "daily_demand_pre_festival_adjustment": parse_optional_float(
+                        row.get("daily_demand_pre_festival_adjustment")
+                    ),
+                    "season": row.get("season", "").strip() or None,
+                    "regional_demand_index": parse_optional_float(row.get("regional_demand_index")),
+                    "day_of_week": parse_optional_int(row.get("day_of_week")),
+                    "week_of_year": parse_optional_int(row.get("week_of_year")),
+                    "forecast_demand_next_7_days": parse_optional_float(row.get("forecast_demand_next_7_days")),
+                    "forecast_demand_next_14_days": parse_optional_float(row.get("forecast_demand_next_14_days")),
+                    "forecast_demand_next_30_days": parse_optional_float(row.get("forecast_demand_next_30_days")),
+                }
+                records.append(record)
+            except Exception as e:
+                logger.error(f"Error parsing demand context fact row: {e}")
+                continue
+        return records
+
+    def load_festival_calendar(self) -> List[Dict]:
+        """Load the festival calendar reference table from db6."""
+        rows = self._read_rows(
+            self.root_dir / "db6_csv_export" / "festival_calendar.csv"
+        )
+        festivals = []
+        for row in rows:
+            try:
+                festival = {
+                    "festival_id": parse_int(row.get("festival_id")),
+                    "festival_name": row.get("festival_name", "").strip(),
+                    "location_id": parse_int(row.get("location_id")),
+                    "start_date": row.get("start_date", "").strip(),
+                    "end_date": row.get("end_date", "").strip(),
+                    "demand_lift_pct": parse_optional_float(row.get("demand_lift_pct")),
+                    "supply_risk_score": parse_optional_float(row.get("supply_risk_score")),
+                    "festival_type": row.get("festival_type", "").strip(),
+                }
+                festivals.append(festival)
+            except Exception as e:
+                logger.error(f"Error parsing festival calendar row: {e}")
+                continue
+        return festivals
+
+    def load_location_climate_profile(self) -> List[Dict]:
+        """Load the location climate profile reference table from db6."""
+        rows = self._read_rows(
+            self.root_dir / "db6_csv_export" / "location_climate_profile.csv"
+        )
+        profiles = []
+        for row in rows:
+            try:
+                profile = {
+                    "location_id": parse_int(row.get("location_id")),
+                    "climate_zone": row.get("climate_zone", "").strip() or None,
+                    "avg_temp_c": parse_optional_float(row.get("avg_temp_c")),
+                    "avg_rainfall_mm_annual": parse_optional_float(row.get("avg_rainfall_mm_annual")),
+                    "weather_sensitivity_score": parse_optional_float(row.get("weather_sensitivity_score")),
+                    "logistics_complexity_score": parse_optional_float(row.get("logistics_complexity_score")),
+                    "regional_demand_index": parse_optional_float(row.get("regional_demand_index")),
+                    "population_index": parse_optional_float(row.get("population_index")),
+                    "income_index": parse_optional_float(row.get("income_index")),
+                    "urbanization_score": parse_optional_float(row.get("urbanization_score")),
+                    "consumer_spending_index": parse_optional_float(row.get("consumer_spending_index")),
+                    "distance_to_dc_km": parse_optional_float(row.get("distance_to_dc_km")),
+                    "regional_supply_risk_score": parse_optional_float(row.get("regional_supply_risk_score")),
+                    "market_maturity_index": parse_optional_float(row.get("market_maturity_index")),
+                }
+                profiles.append(profile)
+            except Exception as e:
+                logger.error(f"Error parsing location climate profile row: {e}")
+                continue
+        return profiles
+
+    def build_weather_context_map(
+        self,
+        source: str = "auto",
+    ) -> "dict[tuple[int, int], WeatherFestivalContext]":
+        """Build a (sku_id, location_id) → WeatherFestivalContext lookup dict.
+
+        This is the primary pipeline integration point for weather/festival
+        signals.  It is called once at agent startup and the resulting dict
+        is passed into InventoryRiskMonitoringService and the orchestrator
+        payload builder for O(1) per-row enrichment.
+
+        Source selection strategy
+        -------------------------
+        ``source='auto'`` (default):
+            1. Try to load the full LFS dataset
+               (synthetic_inventory_weather_region_v2_festival_demand.csv) from
+               the workspace root.  This file is 469 MB and gives the richest
+               signal when available.
+            2. Fall back to db6_csv_export/demand_context_fact.csv (synthetic
+               samples) so offline dev / CI always works without the LFS asset.
+        ``source='lfs'``  — force the LFS file; raise if absent.
+        ``source='db6'``  — force the synthetic db6 samples.
+
+        When multiple rows exist for the same (sku_id, location_id) the most
+        recent date row is kept (mimics a "latest available context" query).
+
+        Returns
+        -------
+        dict mapping (sku_id, location_id) → WeatherFestivalContext.
+        Returns an empty dict (not an error) if no data source is readable,
+        so the rest of the pipeline degrades gracefully.
+        """
+        from agents.inventory_monitoring.models.inventory_models import WeatherFestivalContext
+
+        records: list = []
+
+        if source in ("auto", "lfs"):
+            try:
+                lfs_records = self.load_weather_festival_dataset()
+                if lfs_records:
+                    logger.info(
+                        f"build_weather_context_map: loaded {len(lfs_records)} rows "
+                        "from LFS weather/festival dataset"
+                    )
+                    # Convert WeatherFestivalDemandRecord objects to context dicts
+                    context_map: dict[tuple[int, int], WeatherFestivalContext] = {}
+                    for rec in lfs_records:
+                        key = (rec.sku_id, rec.location_id)
+                        existing = context_map.get(key)
+                        if existing is None or (rec.date and rec.date > getattr(existing, "_date", "")):
+                            ctx = rec.to_weather_festival_context()
+                            # Stash date for recency comparison (not part of the public API)
+                            ctx._date = rec.date  # type: ignore[attr-defined]
+                            context_map[key] = ctx
+                    logger.info(
+                        f"build_weather_context_map: built context for "
+                        f"{len(context_map)} (sku_id, location_id) pairs from LFS file"
+                    )
+                    return context_map
+            except Exception as e:
+                if source == "lfs":
+                    raise
+                logger.info(
+                    f"build_weather_context_map: LFS dataset not available ({e}), "
+                    "falling back to db6 samples"
+                )
+
+        # Fall back to (or explicitly use) the db6 synthetic samples
+        try:
+            records = self.load_demand_context_fact()
+        except Exception as e:
+            logger.warning(f"build_weather_context_map: could not load db6 samples: {e}")
+            return {}
+
+        if not records:
+            logger.warning(
+                "build_weather_context_map: no demand context records found; "
+                "weather/festival enrichment will be skipped for this run"
+            )
+            return {}
+
+        # Build map from db6 dict records — keep most recent row per key
+        date_by_key: dict[tuple[int, int], str] = {}
+        context_map_db6: dict[tuple[int, int], WeatherFestivalContext] = {}
+
+        for row in records:
+            sku_id = row.get("product_id")
+            location_id = row.get("location_id")
+            if sku_id is None or location_id is None:
+                continue
+            key = (sku_id, location_id)
+            row_date = row.get("date", "")
+            if key in date_by_key and row_date <= date_by_key[key]:
+                continue
+            date_by_key[key] = row_date
+            context_map_db6[key] = WeatherFestivalContext(
+                weather_demand_multiplier=row.get("weather_demand_multiplier") or 1.0,
+                weather_severity_index=row.get("weather_severity_index") or 0.0,
+                weather_supply_risk_score=row.get("weather_supply_risk_score") or 0.0,
+                climate_anomaly_score=row.get("climate_anomaly_score") or 0.0,
+                weather_confidence_score=row.get("weather_confidence_score") or 1.0,
+                supply_disruption_risk=row.get("supply_disruption_risk") or 0.0,
+                stockout_weather_risk=row.get("stockout_weather_risk") or 0.0,
+                inventory_weather_pressure=row.get("inventory_weather_pressure") or 0.0,
+                regional_inventory_risk=row.get("regional_inventory_risk") or 0.0,
+                heatwave_flag=bool(row.get("heatwave_flag")),
+                coldwave_flag=bool(row.get("coldwave_flag")),
+                monsoon_flag=bool(row.get("monsoon_flag")),
+                heavy_rain_flag=bool(row.get("heavy_rain_flag")),
+                snowfall_flag=bool(row.get("snowfall_flag")),
+                extreme_weather_flag=bool(row.get("extreme_weather_flag")),
+                temperature_c=row.get("temperature_c"),
+                humidity_pct=row.get("humidity_pct"),
+                rainfall_mm=row.get("rainfall_mm"),
+                snowfall_cm=row.get("snowfall_cm"),
+                weather_adjusted_demand=row.get("weather_adjusted_demand"),
+                weather_adjusted_safety_stock=row.get("weather_adjusted_safety_stock"),
+                weather_adjusted_reorder_point=row.get("weather_adjusted_reorder_point"),
+                is_festival_day=bool(row.get("is_festival_day")),
+                days_to_next_festival=row.get("days_to_next_festival"),
+                festival_proximity_score=row.get("festival_proximity_score") or 0.0,
+                is_shopping_season=bool(row.get("is_shopping_season")),
+                daily_demand_pre_festival_adjustment=row.get("daily_demand_pre_festival_adjustment"),
+                regional_demand_index=row.get("regional_demand_index") or 1.0,
+                regional_adjusted_demand=row.get("regional_adjusted_demand"),
+                season=row.get("season"),
+            )
+
+        logger.info(
+            f"build_weather_context_map: built context for "
+            f"{len(context_map_db6)} (sku_id, location_id) pairs from db6 samples"
+        )
+        return context_map_db6
