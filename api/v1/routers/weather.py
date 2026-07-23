@@ -1,8 +1,4 @@
-"""Weather and festival demand context router for FastAPI backend.
-
-Exposes endpoints for the frontend team to query weather context facts,
-festival calendar entries, and location climate profiles.
-"""
+"""Weather and festival demand context router for FastAPI backend."""
 from __future__ import annotations
 
 import logging
@@ -16,6 +12,22 @@ from utils.csv_loader import CsvInventoryDataLoader
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+def _get_country_code_map(loader: CsvInventoryDataLoader) -> Dict[int, str]:
+    # loc_id -> country_code
+    locations = loader.load_locations()
+    states = loader.load_states()
+    state_to_cc = {}
+    for s in states:
+        sa = s.get("state_code", "")
+        if "-" in sa:
+            state_to_cc[s["state_id"]] = sa.split("-")[0].upper()
+        else:
+            state_to_cc[s["state_id"]] = "US"
+    
+    loc_to_cc = {}
+    for loc in locations:
+        loc_to_cc[loc["location_id"]] = state_to_cc.get(loc["state_id"], "US")
+    return loc_to_cc
 
 @router.get("/context", summary="Get weather and festival demand context facts")
 async def get_weather_context(
@@ -23,7 +35,6 @@ async def get_weather_context(
     location_id: Optional[int] = Query(None, description="Filter by location ID"),
     state: AppState = Depends(get_app_state),
 ) -> Dict[str, Any]:
-    """Retrieve weather & festival demand context records (from db6 demand_context_fact)."""
     context = state.raw_data.get("demand_context", [])
     if not context:
         loader = CsvInventoryDataLoader()
@@ -42,17 +53,21 @@ async def get_weather_context(
 @router.get("/festivals", summary="Get festival calendar entries")
 async def get_festivals(
     location_id: Optional[int] = Query(None, description="Filter by location ID"),
+    country_code: Optional[str] = Query(None, description="Filter by country code (US, IN, SE)"),
     state: AppState = Depends(get_app_state),
 ) -> Dict[str, Any]:
-    """Retrieve festival calendar reference table entries."""
     festivals = state.raw_data.get("festival_calendar", [])
+    loader = CsvInventoryDataLoader()
     if not festivals:
-        loader = CsvInventoryDataLoader()
         festivals = loader.load_festival_calendar()
         state.raw_data["festival_calendar"] = festivals
 
     if location_id is not None:
         festivals = [f for f in festivals if f.get("location_id") == location_id]
+        
+    if country_code is not None:
+        cc_map = _get_country_code_map(loader)
+        festivals = [f for f in festivals if cc_map.get(f.get("location_id")) == country_code.upper()]
 
     return {"count": len(festivals), "data": festivals}
 
@@ -60,16 +75,20 @@ async def get_festivals(
 @router.get("/climate-profiles", summary="Get location climate profiles")
 async def get_climate_profiles(
     location_id: Optional[int] = Query(None, description="Filter by location ID"),
+    country_code: Optional[str] = Query(None, description="Filter by country code (US, IN, SE)"),
     state: AppState = Depends(get_app_state),
 ) -> Dict[str, Any]:
-    """Retrieve location climate profile table entries."""
     profiles = state.raw_data.get("climate_profiles", [])
+    loader = CsvInventoryDataLoader()
     if not profiles:
-        loader = CsvInventoryDataLoader()
         profiles = loader.load_location_climate_profile()
         state.raw_data["climate_profiles"] = profiles
 
     if location_id is not None:
         profiles = [p for p in profiles if p.get("location_id") == location_id]
+        
+    if country_code is not None:
+        cc_map = _get_country_code_map(loader)
+        profiles = [p for p in profiles if cc_map.get(p.get("location_id")) == country_code.upper()]
 
     return {"count": len(profiles), "data": profiles}

@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-The full IMS workflow is implemented across Phases 1-5, with a complete inventory risk detection, replenishment planning, and supplier selection pipeline. It processes 265,000+ inventory records across 53 locations (50 stores + 3 distribution centers) to detect supply chain risks, plan replenishment, and recommend supplier selections.
+The full IMS workflow is implemented across Phases 1-5, with a complete inventory risk detection, replenishment planning, and supplier selection pipeline. It processes 265,000+ inventory records across 74 locations (69 stores + 5 distribution centers globally across US, India, and Sweden) to detect supply chain risks, plan replenishment, and recommend supplier selections.
 
 ### Key Features
 
@@ -103,7 +103,7 @@ Our system processes data from 5 CSV export databases and one enriched demand co
 
 | Database | Purpose | Records | Currently Used |
 |----------|---------|---------|-----------------|
-| DB1 | Store network (locations, stores, DCs, states) | 63 | ✅ Available |
+| DB1 | Store network (locations, stores, DCs, states) | 74 | ✅ Available |
 | DB2 | Product master (SKUs, categories, seasonality) | 5,000+ | ✅ Available |
 | DB3 | Inventory core (positions, in-transit) | ~265K | ✅ Phase 1-5 |
 | DB4 | Suppliers (pricing, performance, risk) | 35+ | ✅ Phase 1-5 |
@@ -111,7 +111,7 @@ Our system processes data from 5 CSV export databases and one enriched demand co
 | Weather/Festival Demand | Enriched demand context with weather and festival signals | 100K+ | ✅ Available |
 
 ### Coverage
-- **Locations**: 53 (50 stores + 3 distribution centers across 10 states)
+- **Locations**: 74 (69 stores + 5 distribution centers across 28 states/regions in US, India, and Sweden)
 - **SKUs**: 5,000+
 - **Inventory Records**: 265,000+
 - **Timespan**: 4+ years of transaction history

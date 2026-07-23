@@ -10,3 +10,20 @@ state_code,state_name,region_id,state_abbrev
 09,Georgia,3,GA
 10,North Carolina,3,NC
 11,Pennsylvania,3,PA
+12,Maharashtra,4,IN-MH
+13,Delhi,4,IN-DL
+14,Karnataka,4,IN-KA
+15,Tamil Nadu,4,IN-TN
+16,Telangana,4,IN-TS
+17,Stockholm County,5,SE-AB
+18,Vastra Gotaland County,5,SE-O
+19,Skane County,5,SE-M
+20,Uppsala County,5,SE-C
+21,Ostergotland County,5,SE-E
+22,Gujarat,4,IN-GJ
+23,Kerala,4,IN-KL
+24,Rajasthan,4,IN-RJ
+25,West Bengal,4,IN-WB
+26,Orebro County,5,SE-T
+27,Vasterbotten County,5,SE-AC
+28,Vastmanland County,5,SE-U

@@ -1,25 +1,31 @@
 from fastapi import APIRouter
 from .routers import (
     agent,
+    dashboard,
     forecasting,
     inventory,
     locations,
     orders,
     products,
     purchase_history,
+    regions,
     risks,
     simulation,
+    suppliers,
     weather,
 )
 
 api_router = APIRouter()
 
 api_router.include_router(agent.router, prefix="/agent", tags=["Agent Operations (Control Panel)"])
+api_router.include_router(dashboard.router, prefix="/dashboard", tags=["Dashboard"])
 api_router.include_router(inventory.router, prefix="/inventory", tags=["Inventory (Agent 1 Inputs)"])
 api_router.include_router(risks.router, prefix="/risks", tags=["Risks (Agent 1 Output -> Agent 2 Input)"])
 api_router.include_router(orders.router, prefix="/orders", tags=["Orders (Agent 2 Outputs)"])
 api_router.include_router(products.router, prefix="/products", tags=["Products"])
 api_router.include_router(locations.router, prefix="/locations", tags=["Locations"])
+api_router.include_router(regions.router, prefix="/regions", tags=["Regions"])
+api_router.include_router(suppliers.router, prefix="/suppliers", tags=["Suppliers"])
 api_router.include_router(
     purchase_history.router,
     prefix="/purchase-history",

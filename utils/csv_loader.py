@@ -353,9 +353,9 @@ class CsvInventoryDataLoader:
             try:
                 dc = {
                     "dc_id": parse_int(row.get("dc_id")),
-                    "dc_name": row.get("dc_name", "").strip(),
-                    "region": row.get("region", "").strip(),
-                    "city": row.get("city", "").strip(),
+                    "dc_name": str(row.get("dc_name") or "").strip(),
+                    "region": str(row.get("region_code") or "").strip(),
+                    "city": str(row.get("city") or "").strip(),
                     "state_id": parse_int(row.get("state_id")),
                 }
                 dcs.append(dc)
@@ -371,9 +371,11 @@ class CsvInventoryDataLoader:
         for row in rows:
             try:
                 state = {
-                    "state_id": parse_int(row.get("state_id")),
+                    "state_id": parse_int(row.get("state_id", row.get("state_code"))),
                     "state_name": row.get("state_name", "").strip(),
                     "state_code": row.get("state_code", "").strip(),
+                    "state_abbrev": row.get("state_abbrev", "").strip(),
+                    "region_id": parse_int(row.get("region_id")),
                 }
                 states.append(state)
             except Exception as e:

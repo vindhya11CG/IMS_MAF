@@ -1,51 +1,70 @@
 store_id,store_code,store_name,store_format_id,state_id,city,zip_code,address,opening_date,status,manager_name,phone
-1,CA-SF-001,San Francisco Downtown,3,01,San Francisco,94105,101 Market St, San Francisco, CA 94105,2018-03-15,ACTIVE,Michael Chen,415-555-0101
-2,CA-LA-002,Los Angeles Beverly Hills,3,01,Los Angeles,90212,9876 Wilshire Blvd, Los Angeles, CA 90212,2019-05-22,ACTIVE,Jennifer Martinez,323-555-0102
-3,CA-SD-003,San Diego Gaslamp,2,01,San Diego,92101,555 Fifth Ave, San Diego, CA 92101,2020-01-10,ACTIVE,Robert Taylor,619-555-0103
-4,CA-OC-004,Orange County Fashion,2,01,Irvine,92614,550 Fashion Ln, Irvine, CA 92614,2020-08-05,ACTIVE,Patricia Anderson,949-555-0104
-5,CA-SJ-005,San Jose Valley Fair,2,01,San Jose,95110,2855 Stevens Creek Blvd, San Jose, CA 95110,2021-02-14,ACTIVE,David Thompson,408-555-0105
-6,WA-SEA-006,Seattle Pike Place,3,02,Seattle,98101,401 Pike St, Seattle, WA 98101,2018-09-20,ACTIVE,Elizabeth Brown,206-555-0106
-7,WA-TAC-007,Tacoma Downtown,2,02,Tacoma,98402,1010 Broadway, Tacoma, WA 98402,2019-11-03,ACTIVE,James Wilson,253-555-0107
-8,WA-SPO-008,Spokane Valley,1,02,Spokane,99216,11000 E Sprague Ave, Spokane, WA 99216,2021-06-18,ACTIVE,Margaret Davis,509-555-0108
-9,TX-DAL-009,Dallas Downtown,3,03,Dallas,75201,100 N Houston St, Dallas, TX 75201,2018-07-12,ACTIVE,Christopher Harris,214-555-0109
-10,TX-HOU-010,Houston Midtown,3,03,Houston,77002,901 Main St, Houston, TX 77002,2019-03-08,ACTIVE,Lisa Garcia,713-555-0110
-11,TX-AUS-011,Austin 6th Street,2,03,Austin,78701,501 Congress Ave, Austin, TX 78701,2020-02-25,ACTIVE,Kevin Moore,512-555-0111
-12,TX-SAN-012,San Antonio Alamo,2,03,San Antonio,78202,300 Alamo Plz, San Antonio, TX 78202,2020-10-14,ACTIVE,Sandra Jackson,210-555-0112
-13,TX-ARL-013,Arlington Town Center,2,03,Arlington,76010,1200 East Lamar Blvd, Arlington, TX 76010,2021-01-30,ACTIVE,Matthew White,817-555-0113
-14,TX-FOR-014,Fort Worth Clearfork,1,03,Fort Worth,76102,2510 W 7th St, Fort Worth, TX 76102,2021-05-22,ACTIVE,Angela Martin,817-555-0114
-15,IL-CHI-015,Chicago Loop,3,04,Chicago,60601,233 S Wacker Dr, Chicago, IL 60601,2018-02-10,ACTIVE,Thomas Rodriguez,312-555-0115
-16,IL-CHI-016,Chicago Northbrook,2,04,Northbrook,60062,2171 Northbrook Court, Northbrook, IL 60062,2019-04-15,ACTIVE,Barbara Lee,847-555-0116
-17,IL-OAK-017,Oak Brook,2,04,Oak Brook,60523,3000 Lacey Rd, Oak Brook, IL 60523,2020-06-03,ACTIVE,Richard Clark,630-555-0117
-18,IL-AUR-018,Aurora,1,04,Aurora,60505,1 Aurora Plaza, Aurora, IL 60505,2021-08-12,ACTIVE,Karen Lewis,331-555-0118
-19,IL-NAP-019,Naperville,2,04,Naperville,60540,131 S Washington St, Naperville, IL 60540,2021-09-27,ACTIVE,Jason Walker,630-555-0119
-20,OH-COL-020,Columbus High Street,3,05,Columbus,43215,100 S High St, Columbus, OH 43215,2018-05-20,ACTIVE,Nancy Hall,614-555-0120
-21,OH-CLE-021,Cleveland Public Sq,2,05,Cleveland,44114,50 Public Sq, Cleveland, OH 44114,2019-08-18,ACTIVE,Dennis Allen,216-555-0121
-22,OH-CIN-022,Cincinnati Downtown,2,05,Cincinnati,45202,500 Vine St, Cincinnati, OH 45202,2020-03-07,ACTIVE,Brenda Young,513-555-0122
-23,OH-TOL-023,Toledo,1,05,Toledo,43604,401 Madison Ave, Toledo, OH 43604,2021-04-13,ACTIVE,George Hernandez,419-555-0123
-24,OH-DAY-024,Dayton,1,05,Dayton,45402,1 Main St, Dayton, OH 45402,2021-07-08,ACTIVE,Donna King,937-555-0124
-25,MI-DET-025,Detroit Downtown,3,06,Detroit,48226,100 Renaissance Center, Detroit, MI 48226,2018-10-05,ACTIVE,Ronald Wright,313-555-0125
-26,MI-ANN-026,Ann Arbor,2,06,Ann Arbor,48103,212 S Main St, Ann Arbor, MI 48103,2019-12-20,ACTIVE,Susan Lopez,734-555-0126
-27,MI-GRA-027,Grand Rapids,2,06,Grand Rapids,49503,90 Monroe Center NW, Grand Rapids, MI 49503,2020-09-14,ACTIVE,Steven Hill,616-555-0127
-28,MI-LAN-028,Lansing,1,06,Lansing,48933,124 W Michigan Ave, Lansing, MI 48933,2021-03-29,ACTIVE,Karen Scott,517-555-0128
-29,FL-MIA-029,Miami Brickell,3,07,Miami,33131,701 Brickell Ave, Miami, FL 33131,2018-11-12,ACTIVE,Edward Green,305-555-0129
-30,FL-ORL-030,Orlando Downtown,3,07,Orlando,32801,150 E Main St, Orlando, FL 32801,2019-02-09,ACTIVE,Carol Adams,407-555-0130
-31,FL-TAM-031,Tampa Downtown,2,07,Tampa,33602,303 S Franklin St, Tampa, FL 33602,2020-04-22,ACTIVE,Mark Nelson,813-555-0131
-32,FL-JAX-032,Jacksonville,2,07,Jacksonville,32202,1 Independent Dr, Jacksonville, FL 32202,2020-07-11,ACTIVE,Janet Carter,904-555-0132
-33,FL-FTL-033,Fort Lauderdale,2,07,Fort Lauderdale,33301,101 N New River Dr, Fort Lauderdale, FL 33301,2021-02-18,ACTIVE,Paul Mitchell,954-555-0133
-34,FL-WPB-034,West Palm Beach,1,07,West Palm Beach,33401,251 Clematis St, West Palm Beach, FL 33401,2021-10-05,ACTIVE,Laura Perez,561-555-0134
-35,NY-NYC-035,Manhattan 5th Avenue,3,08,New York,10022,675 5th Ave, New York, NY 10022,2017-12-08,ACTIVE,Michael Dunn,212-555-0135
-36,NY-NYC-036,Brooklyn Heights,2,08,Brooklyn,11201,60 Henry St, Brooklyn, NY 11201,2019-06-14,ACTIVE,Jennifer Roberts,718-555-0136
-37,NY-ALB-037,Albany Downtown,2,08,Albany,12207,19 N Pearl St, Albany, NY 12207,2020-08-25,ACTIVE,Brian Phillips,518-555-0137
-38,NY-BUF-038,Buffalo,1,08,Buffalo,14202,617 Main St, Buffalo, NY 14202,2021-05-19,ACTIVE,Rebecca Campbell,716-555-0138
-39,NY-ROC-039,Rochester,1,08,Rochester,14604,50 State St, Rochester, NY 14604,2021-09-10,ACTIVE,Charles Parker,585-555-0139
-40,GA-ATL-040,Atlanta Midtown,3,09,Atlanta,30303,1180 Peachtree St NE, Atlanta, GA 30303,2018-04-18,ACTIVE,Shirley Evans,404-555-0140
-41,GA-SAV-041,Savannah Historic,2,09,Savannah,31401,1 River St, Savannah, GA 31401,2019-10-22,ACTIVE,Douglas Edwards,912-555-0141
-42,GA-AUG-042,Augusta,1,09,Augusta,30901,1 10th St, Augusta, GA 30901,2021-01-15,ACTIVE,Rose Collins,706-555-0142
-43,GA-MAR-043,Marietta,1,09,Marietta,30060,1 Marietta Sq, Marietta, GA 30060,2021-06-30,ACTIVE,Ryan Stewart,770-555-0143
-44,NC-CHA-044,Charlotte Uptown,3,10,Charlotte,28202,1 Trade St, Charlotte, NC 28202,2018-06-25,ACTIVE,Joyce Morris,704-555-0144
-45,NC-RAL-045,Raleigh Downtown,2,10,Raleigh,27601,1 Fayetteville St, Raleigh, NC 27601,2019-09-05,ACTIVE,Gary Murphy,919-555-0145
-46,NC-GRE-046,Greensboro,1,10,Greensboro,27401,1 S Elm St, Greensboro, NC 27401,2021-02-12,ACTIVE,Helen Rogers,336-555-0146
-47,NC-ASH-047,Asheville,1,10,Asheville,28801,1 N Lexington Ave, Asheville, NC 28801,2021-08-03,ACTIVE,Vincent Morgan,828-555-0147
-48,PA-PHI-048,Philadelphia Downtown,3,11,Philadelphia,19103,1500 Market St, Philadelphia, PA 19103,2018-08-30,ACTIVE,Diane Peterson,215-555-0148
-49,PA-PIT-049,Pittsburgh Downtown,2,11,Pittsburgh,15219,600 Grant St, Pittsburgh, PA 15219,2019-07-16,ACTIVE,Andrew Gray,412-555-0149
-50,PA-PHI-050,Philadelphia King of Prussia,2,11,King of Prussia,19406,160 N Gulph Rd, King of Prussia, PA 19406,2020-12-10,ACTIVE,Cynthia Ramirez,610-555-0150
+1,CA-SF-001,San Francisco Downtown,3,01,San Francisco,94105,101 Market St, San Francisco, CA 94105,2018-03-15,ACTIVE
+2,CA-LA-002,Los Angeles Beverly Hills,3,01,Los Angeles,90212,9876 Wilshire Blvd, Los Angeles, CA 90212,2019-05-22,ACTIVE
+3,CA-SD-003,San Diego Gaslamp,2,01,San Diego,92101,555 Fifth Ave, San Diego, CA 92101,2020-01-10,ACTIVE
+4,CA-OC-004,Orange County Fashion,2,01,Irvine,92614,550 Fashion Ln, Irvine, CA 92614,2020-08-05,ACTIVE
+5,CA-SJ-005,San Jose Valley Fair,2,01,San Jose,95110,2855 Stevens Creek Blvd, San Jose, CA 95110,2021-02-14,ACTIVE
+6,WA-SEA-006,Seattle Pike Place,3,02,Seattle,98101,401 Pike St, Seattle, WA 98101,2018-09-20,ACTIVE
+7,WA-TAC-007,Tacoma Downtown,2,02,Tacoma,98402,1010 Broadway, Tacoma, WA 98402,2019-11-03,ACTIVE
+8,WA-SPO-008,Spokane Valley,1,02,Spokane,99216,11000 E Sprague Ave, Spokane, WA 99216,2021-06-18,ACTIVE
+9,TX-DAL-009,Dallas Downtown,3,03,Dallas,75201,100 N Houston St, Dallas, TX 75201,2018-07-12,ACTIVE
+10,TX-HOU-010,Houston Midtown,3,03,Houston,77002,901 Main St, Houston, TX 77002,2019-03-08,ACTIVE
+11,TX-AUS-011,Austin 6th Street,2,03,Austin,78701,501 Congress Ave, Austin, TX 78701,2020-02-25,ACTIVE
+12,TX-SAN-012,San Antonio Alamo,2,03,San Antonio,78202,300 Alamo Plz, San Antonio, TX 78202,2020-10-14,ACTIVE
+13,TX-ARL-013,Arlington Town Center,2,03,Arlington,76010,1200 East Lamar Blvd, Arlington, TX 76010,2021-01-30,ACTIVE
+14,TX-FOR-014,Fort Worth Clearfork,1,03,Fort Worth,76102,2510 W 7th St, Fort Worth, TX 76102,2021-05-22,ACTIVE
+15,IL-CHI-015,Chicago Loop,3,04,Chicago,60601,233 S Wacker Dr, Chicago, IL 60601,2018-02-10,ACTIVE
+16,IL-CHI-016,Chicago Northbrook,2,04,Northbrook,60062,2171 Northbrook Court, Northbrook, IL 60062,2019-04-15,ACTIVE
+17,IL-OAK-017,Oak Brook,2,04,Oak Brook,60523,3000 Lacey Rd, Oak Brook, IL 60523,2020-06-03,ACTIVE
+18,IL-AUR-018,Aurora,1,04,Aurora,60505,1 Aurora Plaza, Aurora, IL 60505,2021-08-12,ACTIVE
+19,IL-NAP-019,Naperville,2,04,Naperville,60540,131 S Washington St, Naperville, IL 60540,2021-09-27,ACTIVE
+20,OH-COL-020,Columbus High Street,3,05,Columbus,43215,100 S High St, Columbus, OH 43215,2018-05-20,ACTIVE
+21,OH-CLE-021,Cleveland Public Sq,2,05,Cleveland,44114,50 Public Sq, Cleveland, OH 44114,2019-08-18,ACTIVE
+22,OH-CIN-022,Cincinnati Downtown,2,05,Cincinnati,45202,500 Vine St, Cincinnati, OH 45202,2020-03-07,ACTIVE
+23,OH-TOL-023,Toledo,1,05,Toledo,43604,401 Madison Ave, Toledo, OH 43604,2021-04-13,ACTIVE
+24,OH-DAY-024,Dayton,1,05,Dayton,45402,1 Main St, Dayton, OH 45402,2021-07-08,ACTIVE
+25,MI-DET-025,Detroit Downtown,3,06,Detroit,48226,100 Renaissance Center, Detroit, MI 48226,2018-10-05,ACTIVE
+26,MI-ANN-026,Ann Arbor,2,06,Ann Arbor,48103,212 S Main St, Ann Arbor, MI 48103,2019-12-20,ACTIVE
+27,MI-GRA-027,Grand Rapids,2,06,Grand Rapids,49503,90 Monroe Center NW, Grand Rapids, MI 49503,2020-09-14,ACTIVE
+28,MI-LAN-028,Lansing,1,06,Lansing,48933,124 W Michigan Ave, Lansing, MI 48933,2021-03-29,ACTIVE
+29,FL-MIA-029,Miami Brickell,3,07,Miami,33131,701 Brickell Ave, Miami, FL 33131,2018-11-12,ACTIVE
+30,FL-ORL-030,Orlando Downtown,3,07,Orlando,32801,150 E Main St, Orlando, FL 32801,2019-02-09,ACTIVE
+31,FL-TAM-031,Tampa Downtown,2,07,Tampa,33602,303 S Franklin St, Tampa, FL 33602,2020-04-22,ACTIVE
+32,FL-JAX-032,Jacksonville,2,07,Jacksonville,32202,1 Independent Dr, Jacksonville, FL 32202,2020-07-11,ACTIVE
+33,FL-FTL-033,Fort Lauderdale,2,07,Fort Lauderdale,33301,101 N New River Dr, Fort Lauderdale, FL 33301,2021-02-18,ACTIVE
+34,FL-WPB-034,West Palm Beach,1,07,West Palm Beach,33401,251 Clematis St, West Palm Beach, FL 33401,2021-10-05,ACTIVE
+35,NY-NYC-035,Manhattan 5th Avenue,3,08,New York,10022,675 5th Ave, New York, NY 10022,2017-12-08,ACTIVE
+36,NY-NYC-036,Brooklyn Heights,2,08,Brooklyn,11201,60 Henry St, Brooklyn, NY 11201,2019-06-14,ACTIVE
+37,NY-ALB-037,Albany Downtown,2,08,Albany,12207,19 N Pearl St, Albany, NY 12207,2020-08-25,ACTIVE
+38,NY-BUF-038,Buffalo,1,08,Buffalo,14202,617 Main St, Buffalo, NY 14202,2021-05-19,ACTIVE
+39,NY-ROC-039,Rochester,1,08,Rochester,14604,50 State St, Rochester, NY 14604,2021-09-10,ACTIVE
+40,GA-ATL-040,Atlanta Midtown,3,09,Atlanta,30303,1180 Peachtree St NE, Atlanta, GA 30303,2018-04-18,ACTIVE
+41,GA-SAV-041,Savannah Historic,2,09,Savannah,31401,1 River St, Savannah, GA 31401,2019-10-22,ACTIVE
+42,GA-AUG-042,Augusta,1,09,Augusta,30901,1 10th St, Augusta, GA 30901,2021-01-15,ACTIVE
+43,GA-MAR-043,Marietta,1,09,Marietta,30060,1 Marietta Sq, Marietta, GA 30060,2021-06-30,ACTIVE
+44,NC-CHA-044,Charlotte Uptown,3,10,Charlotte,28202,1 Trade St, Charlotte, NC 28202,2018-06-25,ACTIVE
+45,NC-RAL-045,Raleigh Downtown,2,10,Raleigh,27601,1 Fayetteville St, Raleigh, NC 27601,2019-09-05,ACTIVE
+46,NC-GRE-046,Greensboro,1,10,Greensboro,27401,1 S Elm St, Greensboro, NC 27401,2021-02-12,ACTIVE
+47,NC-ASH-047,Asheville,1,10,Asheville,28801,1 N Lexington Ave, Asheville, NC 28801,2021-08-03,ACTIVE
+48,PA-PHI-048,Philadelphia Downtown,3,11,Philadelphia,19103,1500 Market St, Philadelphia, PA 19103,2018-08-30,ACTIVE
+49,PA-PIT-049,Pittsburgh Downtown,2,11,Pittsburgh,15219,600 Grant St, Pittsburgh, PA 15219,2019-07-16,ACTIVE
+50,PA-PHI-050,Philadelphia King of Prussia,2,11,King of Prussia,19406,160 N Gulph Rd, King of Prussia, PA 19406,2020-12-10,ACTIVE
+54,IN-MUM-054,Mumbai Central,3,12,Mumbai,400001,100 Dr DN Road Mumbai MH 400001,2022-01-15,ACTIVE,Rajesh Sharma,+91-22-555-0151
+55,IN-DEL-055,Delhi Connaught Place,3,13,Delhi,110001,A-Block Connaught Place Delhi 110001,2022-02-20,ACTIVE,Priya Singh,+91-11-555-0152
+56,IN-BLR-056,Bangalore MG Road,3,14,Bangalore,560001,56 MG Road Bangalore KA 560001,2022-03-10,ACTIVE,Arun Kumar,+91-80-555-0153
+57,IN-CHN-057,Chennai T Nagar,2,15,Chennai,600017,10 Usman Road T Nagar Chennai 600017,2022-04-05,ACTIVE,Lakshmi Iyer,+91-44-555-0154
+58,IN-HYD-058,Hyderabad Banjara Hills,2,16,Hyderabad,500034,Road No 12 Banjara Hills HYD 500034,2022-05-12,ACTIVE,Venkat Reddy,+91-40-555-0155
+59,IN-AMD-059,Ahmedabad SG Highway,2,22,Ahmedabad,380054,SG Highway Ahmedabad GJ 380054,2022-06-01,ACTIVE,Meera Patel,+91-79-555-0156
+60,IN-KOC-060,Kochi MG Road,2,23,Kochi,682016,MG Road Kochi KL 682016,2022-07-18,ACTIVE,Thomas George,+91-484-555-0157
+61,IN-PUN-061,Pune FC Road,2,12,Pune,411004,FC Road Shivajinagar Pune 411004,2022-08-25,ACTIVE,Sneha Kulkarni,+91-20-555-0158
+62,IN-JAI-062,Jaipur MI Road,1,24,Jaipur,302001,MI Road Jaipur RJ 302001,2022-09-14,ACTIVE,Vikram Rathore,+91-141-555-0159
+63,IN-KOL-063,Kolkata Park Street,2,25,Kolkata,700016,Park Street Kolkata WB 700016,2022-10-05,ACTIVE,Debashis Mukherjee,+91-33-555-0160
+64,SE-STO-064,Stockholm Drottninggatan,3,17,Stockholm,11121,Drottninggatan 50 111 21 Stockholm,2022-03-01,ACTIVE,Erik Johansson,+46-8-555-0161
+65,SE-GOT-065,Gothenburg Nordstan,3,18,Gothenburg,41103,Nordstadstorget 6 411 03 Gothenburg,2022-04-15,ACTIVE,Anna Lindgren,+46-31-555-0162
+66,SE-MAL-066,Malmo Triangeln,2,19,Malmo,21143,Sodra Forstadsgatan 41 211 43 Malmo,2022-05-22,ACTIVE,Karl Andersson,+46-40-555-0163
+67,SE-UPP-067,Uppsala City Center,2,20,Uppsala,75320,Dragarbrunnsgatan 25 753 20 Uppsala,2022-06-10,ACTIVE,Sofia Bergstrom,+46-18-555-0164
+68,SE-LIN-068,Linkoping Stora Torget,2,21,Linkoping,58222,Stora Torget 5 582 22 Linkoping,2022-07-08,ACTIVE,Lars Nilsson,+46-13-555-0165
+69,SE-ORE-069,Orebro City Center,1,26,Orebro,70211,Drottninggatan 12 702 11 Orebro,2022-08-15,ACTIVE,Maria Eriksson,+46-19-555-0166
+70,SE-HEL-070,Helsingborg Kullagatan,1,19,Helsingborg,25220,Kullagatan 30 252 20 Helsingborg,2022-09-01,ACTIVE,Jonas Pettersson,+46-42-555-0167
+71,SE-UME-071,Umea Renmarkstorget,1,27,Umea,90326,Renmarkstorget 1 903 26 Umea,2022-10-20,ACTIVE,Karin Gustafsson,+46-90-555-0168
+72,SE-VAS-072,Vasteras City Center,1,28,Vasteras,72215,Vasagatan 10 722 15 Vasteras,2022-11-05,ACTIVE,Per Olsson,+46-21-555-0169

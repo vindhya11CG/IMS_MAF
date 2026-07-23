@@ -52,3 +52,24 @@ location_id,location_type,location_name,state_id,city
 51,DC,West Coast DC,01,Los Angeles
 52,DC,Central Hub DC,04,Chicago
 53,DC,East Coast DC,08,New York
+54,STORE,Mumbai Central,12,Mumbai
+55,STORE,Delhi Connaught Place,13,Delhi
+56,STORE,Bangalore MG Road,14,Bangalore
+57,STORE,Chennai T Nagar,15,Chennai
+58,STORE,Hyderabad Banjara Hills,16,Hyderabad
+59,STORE,Ahmedabad SG Highway,22,Ahmedabad
+60,STORE,Kochi MG Road,23,Kochi
+61,STORE,Pune FC Road,12,Pune
+62,STORE,Jaipur MI Road,24,Jaipur
+63,STORE,Kolkata Park Street,25,Kolkata
+64,STORE,Stockholm Drottninggatan,17,Stockholm
+65,STORE,Gothenburg Nordstan,18,Gothenburg
+66,STORE,Malmo Triangeln,19,Malmo
+67,STORE,Uppsala City Center,20,Uppsala
+68,STORE,Linkoping Stora Torget,21,Linkoping
+69,STORE,Orebro City Center,26,Orebro
+70,STORE,Helsingborg Kullagatan,19,Helsingborg
+71,STORE,Umea Renmarkstorget,27,Umea
+72,STORE,Vasteras City Center,28,Vasteras
+73,DC,India Hub DC,12,Mumbai
+74,DC,Sweden Nordic DC,17,Stockholm
