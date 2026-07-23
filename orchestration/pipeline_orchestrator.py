@@ -1,10 +1,18 @@
 from __future__ import annotations
- 
+
 import dataclasses
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
- 
+
+# Ensure project root is at the front of sys.path so local `agents` module is loaded instead of site-packages
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from config import AzureOpenAIClient, AzureOpenAIConfig
 from agents import (
     InventoryMonitoringAgent,
     ReplenishmentPlanningAgent,
@@ -13,7 +21,6 @@ from agents import (
 from agents.inventory_monitoring.models import RiskAssessment, WeatherFestivalContext
 from demand_forecast_agent import DemandForecastAgent
 from utils.csv_loader import CsvInventoryDataLoader
-from config import AzureOpenAIClient, AzureOpenAIConfig
  
 logger = logging.getLogger(__name__)
  

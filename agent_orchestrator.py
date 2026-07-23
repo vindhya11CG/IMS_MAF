@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import logging
+import sys
+from pathlib import Path
 from typing import Optional
+
+# Ensure project root is at the front of sys.path so local `agents` package is imported
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from agents.inventory_monitoring import InventoryMonitoringAgent
 from agents.replenishment_planning import ReplenishmentPlanningAgent

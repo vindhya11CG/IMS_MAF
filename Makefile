@@ -15,13 +15,15 @@
 
 # -- Platform detection -------------------------------------------------------
 ifeq ($(OS),Windows_NT)
-    VENV_BIN  := .venv\Scripts
+    VENV_NAME := $(shell if exist venv (echo venv) else (echo .venv))
+    VENV_BIN  := $(VENV_NAME)\Scripts
     PYTHON    := python
     RM_RF     := rd /s /q
     FIND_PYC  := del /s /q *.pyc 2>NUL || true
     MKDIR     := mkdir
 else
-    VENV_BIN  := .venv/bin
+    VENV_NAME := $(shell if [ -d "venv" ]; then echo "venv"; else echo ".venv"; fi)
+    VENV_BIN  := $(VENV_NAME)/bin
     PYTHON    := python3
     RM_RF     := rm -rf
     FIND_PYC  := find . -type f -name "*.pyc" -delete
