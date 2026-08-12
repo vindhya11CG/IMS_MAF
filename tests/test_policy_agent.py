@@ -114,3 +114,22 @@ def test_policy_evaluation_service_backward_compat_no_weather_arg():
     # Should not raise; compliance flag must be set
     assert isinstance(result.policy_compliance, bool)
     assert result.policy_compliance is True
+
+
+def test_policy_agent_summarizes_selected_option_per_order():
+    """PolicyAgent should report compliance per order, not per raw candidate evaluation."""
+    agent = PolicyAgent()
+
+    compliant = make_eval(1, "GoodSupplier", sku=100, loc=1, unit_cost=10.0, reliability=0.95)
+    compliant.order_id = "ORD-001"
+    compliant.final_score = 95.0
+
+    non_compliant = make_eval(2, "BadSupplier", sku=100, loc=1, unit_cost=12.0, reliability=0.60)
+    non_compliant.order_id = "ORD-001"
+    non_compliant.final_score = 40.0
+
+    result = agent.execute([non_compliant, compliant], policy_name="STANDARD")
+
+    assert result["summary"]["evaluated"] == 1
+    assert result["summary"]["compliant"] == 1
+    assert result["summary"]["non_compliant"] == 0

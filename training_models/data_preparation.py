@@ -1,45 +1,6 @@
 """
 Data Preparation Module for Demand Forecasting
-Handles data loading, cleaning, and feature engineering
-
-FIXES APPLIED (vs. the original file):
-
-1. Column names now match the real dataset / DB schema. The original file
-   referenced columns that don't exist anywhere in the system:
-       item_id            -> product_id          (matches products.sku_id / CSV)
-       storage_location_id-> location_id          (matches locations/inventory_positions)
-       stock_level        -> on_hand_qty          (matches inventory_positions)
-       unit_price         -> avg_retail_price     (matches CSV / products.retail_price)
-       reorder_point      -> reorder_point_qty    (matches inventory_positions)
-       category (string)  -> category_id (numeric, already in the CSV/DB - no
-                              re-encoding needed, see #3 below)
-       item_popularity_score -> does not exist anywhere; velocity is instead
-                              taken directly from velocity_class_id, which the
-                              dataset already provides.
-
-2. Hardcoded input filename `synthetic_inventory.csv` did not match the
-   real file `synthetic_inventory_db_native.csv`. Now configurable via the
-   `csv_path` constructor arg / `TRAINING_DATA_PATH` env var, defaulting to
-   the real filename.
-
-3. Category encoding used to be `{cat: idx for idx, cat in enumerate(df['category'].unique())}`
-   - built fresh from whatever order categories happened to appear in in a
-   given run. That is non-deterministic across separate training runs (and
-   meaningless at inference, which sees one row at a time). The dataset
-   already has a stable numeric `category_id` from the DB schema
-   (product_categories.category_id), so it's used directly instead.
-
-4. Feature engineering (stock_gap, available_stock, safety_ratio,
-   velocity_score, temporal features, is_promotional_int) is now delegated
-   to `demand_forecast_agent.services.feature_engineering_service.FeatureEngineeringService`
-   - the SAME class the live agent uses at inference. This is what keeps
-   training and inference features from drifting apart again in the future.
-
-5. Lag/rolling features are still computed here for exploratory analysis
-   (`explore_data`/plots), but are no longer fed to the deployed model,
-   since a live single-row inference request has no history to compute
-   them from. See training_models/model_training.py for the fixed model
-   feature list.
+Handles data loading, cleaning, and feature engineering for synthetic_inventory_weather_region_v2_festival_demand.csv
 """
 import os
 import sys
@@ -58,7 +19,7 @@ from demand_forecast_agent.services.feature_engineering_service import (
     FeatureEngineeringService,
 )
 
-DEFAULT_CSV_NAME = "synthetic_inventory_db_native.csv"
+DEFAULT_CSV_NAME = "synthetic_inventory_weather_region_v2_festival_demand.csv"
 
 
 class DataPreparation:
@@ -75,8 +36,8 @@ class DataPreparation:
         """Load CSV with proper data type handling"""
         print("[LOAD] Reading CSV file...")
         self.df = pd.read_csv(self.csv_path)
-        print(f"\u2713 Loaded {len(self.df):,} records")
-        print(f"\u2713 Date range: {self.df['date'].min()} to {self.df['date'].max()}")
+        print(f"[OK] Loaded {len(self.df):,} records")
+        print(f"[OK] Date range: {self.df['date'].min()} to {self.df['date'].max()}")
         return self
 
     def explore_data(self):
@@ -100,7 +61,12 @@ class DataPreparation:
         # Remove duplicates
         before = len(self.df)
         self.df = self.df.drop_duplicates()
-        print(f"\u2713 Removed {before - len(self.df)} duplicate rows")
+        print(f"[OK] Removed {before - len(self.df)} duplicate rows")
+
+        # Ensure calendar & weekend columns
+        self.df["day_of_week"] = self.df["date"].dt.dayofweek
+        self.df["week_of_year"] = self.df["date"].dt.isocalendar().week.astype(int)
+        self.df["is_weekend"] = self.df["day_of_week"].isin([5, 6]).astype(int)
 
         # Handle missing values
         numeric_cols = self.df.select_dtypes(include=[np.number]).columns
@@ -108,45 +74,20 @@ class DataPreparation:
             missing = self.df[col].isnull().sum()
             if missing > 0:
                 self.df[col] = self.df[col].ffill().bfill()
-                print(f"\u2713 Filled {missing} missing values in {col}")
+                print(f"[OK] Filled {missing} missing values in {col}")
 
         # Ensure positive demands
         self.df["daily_demand"] = self.df["daily_demand"].clip(lower=0)
 
-        # Remove outliers (demands > 5 std devs from mean per product)
-        for product in self.df["product_id"].unique():
-            mask = self.df["product_id"] == product
-            demand_data = self.df.loc[mask, "daily_demand"]
-            if len(demand_data) > 0:
-                mean = demand_data.mean()
-                std = demand_data.std()
-                if std > 0:
-                    outlier_threshold = mean + (5 * std)
-                    # NOTE: daily_demand is int64. clip(upper=<float>) produces
-                    # float64 results, and newer pandas (this project sees
-                    # pandas 2.x/3.x) raises LossySetitemError rather than
-                    # silently downcasting when you assign floats back into
-                    # an int64 column via .loc. Round + cast explicitly so
-                    # the dtype stays consistent either way.
-                    clipped = (
-                        self.df.loc[mask, "daily_demand"]
-                        .clip(upper=outlier_threshold)
-                        .round()
-                        .astype(self.df["daily_demand"].dtype)
-                    )
-                    self.df.loc[mask, "daily_demand"] = clipped
-
-        # Phase 6: Weather & festival boolean columns — cast to int now so
-        # FeatureEngineeringService's bool→int conversion is idempotent on
-        # the already-numeric representation during batch training.
+        # Convert boolean/string flag columns to int
         _bool_cols = [
             "heatwave_flag", "coldwave_flag", "monsoon_flag",
             "heavy_rain_flag", "snowfall_flag", "extreme_weather_flag",
-            "is_festival_day", "is_shopping_season",
+            "is_festival_day", "is_shopping_season", "is_promotional"
         ]
         for col in _bool_cols:
             if col in self.df.columns:
-                self.df[col] = (
+                self.df[f"{col}_int"] = (
                     self.df[col]
                     .astype(str)
                     .str.lower()
@@ -155,33 +96,16 @@ class DataPreparation:
                 )
 
         self.df_clean = self.df.copy()
-        print("\u2713 Data cleaned and validated")
-        _wx_cols_present = [c for c in _bool_cols if c in self.df_clean.columns]
-        if _wx_cols_present:
-            print(f"\u2713 Weather/festival columns detected and pre-processed: {_wx_cols_present}")
+        print("[OK] Data cleaned and validated")
         return self
 
     def feature_engineering(self):
-        """Create model features using the SHARED FeatureEngineeringService
-        (the same class used at inference time), plus exploratory-only
-        lag/rolling features that are not fed to the deployed model.
-
-        Phase 6: When the training CSV includes weather/festival columns
-        (is_festival_day, is_shopping_season, weather_demand_multiplier,
-        etc.), FeatureEngineeringService.execute() picks them up automatically
-        and derives the new MODEL_FEATURES (is_festival_day_int,
-        is_shopping_season_int, festival_proximity_score, ...) so no extra
-        code is required here.
-        """
+        """Create model features using the SHARED FeatureEngineeringService"""
         print("\n[FEATURES] Engineering features...")
 
         self.df_clean = self.engineer.execute(self.df_clean)
 
-        # Exploratory-only lag/rolling features (per product). NOT part of
-        # FeatureEngineeringService.MODEL_FEATURES, so they are never sent
-        # to the model - a single inference request has no history to
-        # compute these from, so training the model on them would create
-        # exactly the train/inference skew this fix is meant to eliminate.
+        # Exploratory lag/rolling features per product
         self.df_clean = self.df_clean.sort_values(["product_id", "date"])
         for lag in [1, 7, 14, 30]:
             self.df_clean[f"demand_lag_{lag}"] = self.df_clean.groupby("product_id")[
@@ -193,26 +117,13 @@ class DataPreparation:
                 .transform(lambda x: x.rolling(window=window, min_periods=1).mean())
             )
 
-        print(f"\u2713 Created temporal + inventory + exploratory lag/rolling features")
-        print(f"\u2713 Total columns now: {len(self.df_clean.columns)}")
-        print(f"\u2713 Model-facing feature columns: {FeatureEngineeringService.MODEL_FEATURES}")
-        # Report which weather/festival MODEL_FEATURES are actually populated
-        wx_model_feats = [
-            f for f in FeatureEngineeringService.MODEL_FEATURES
-            if "weather" in f or "festival" in f or "season" in f or "climate" in f or "regional" in f
-        ]
-        present = [f for f in wx_model_feats if f in self.df_clean.columns and self.df_clean[f].any()]
-        if present:
-            print(f"\u2713 Weather/festival MODEL_FEATURES populated: {present}")
-        else:
-            print("  (Weather/festival MODEL_FEATURES will default to 0 — LFS dataset not loaded)")
+        print(f"[OK] Created temporal + inventory + exploratory features")
+        print(f"[OK] Total columns: {len(self.df_clean.columns)}")
+        print(f"[OK] Model feature count: {len(FeatureEngineeringService.MODEL_FEATURES)}")
         return self
 
     def create_train_val_test_splits(self, train_ratio=0.70, val_ratio=0.15, test_ratio=0.15):
-        """
-        Time-series aware split to prevent data leakage
-        70% train, 15% val, 15% test
-        """
+        """Time-series aware split to prevent data leakage"""
         print("\n[SPLIT] Creating train/val/test splits...")
 
         self.df_clean = self.df_clean.sort_values("date").reset_index(drop=True)
@@ -228,71 +139,35 @@ class DataPreparation:
         self.val_df = self.df_clean.iloc[train_end:val_end].copy()
         self.test_df = self.df_clean.iloc[val_end:].copy()
 
-        print(f"\u2713 Train: {len(self.train_df):,} records ({train_ratio*100:.0f}%)")
-        print(f"\u2713 Validation: {len(self.val_df):,} records ({val_ratio*100:.0f}%)")
-        print(f"\u2713 Test: {len(self.test_df):,} records ({test_ratio*100:.0f}%)")
+        print(f"[OK] Train: {len(self.train_df):,} records ({train_ratio*100:.0f}%)")
+        print(f"[OK] Validation: {len(self.val_df):,} records ({val_ratio*100:.0f}%)")
+        print(f"[OK] Test: {len(self.test_df):,} records ({test_ratio*100:.0f}%)")
 
         return self
-
-    def get_item_location_series(self, product_id, location_id=None):
-        """Extract time series for a specific product (and location if specified)"""
-        if location_id:
-            mask = (self.df_clean["product_id"] == product_id) & (
-                self.df_clean["location_id"] == location_id
-            )
-        else:
-            mask = self.df_clean["product_id"] == product_id
-
-        series = self.df_clean[mask].sort_values("date")[["date", "daily_demand"]].reset_index(
-            drop=True
-        )
-        return series
 
     def get_summary_stats(self):
         """Summary statistics for reporting"""
         stats = {
             "total_records": len(self.df_clean),
-            "date_range_start": self.df_clean["date"].min(),
-            "date_range_end": self.df_clean["date"].max(),
+            "date_range_start": str(self.df_clean["date"].min()),
+            "date_range_end": str(self.df_clean["date"].max()),
             "unique_products": self.df_clean["product_id"].nunique(),
             "unique_categories": self.df_clean["category_id"].nunique(),
             "unique_locations": self.df_clean["location_id"].nunique(),
-            "avg_daily_demand": self.df_clean["daily_demand"].mean(),
-            "std_daily_demand": self.df_clean["daily_demand"].std(),
-            "min_daily_demand": self.df_clean["daily_demand"].min(),
-            "max_daily_demand": self.df_clean["daily_demand"].max(),
+            "avg_daily_demand": round(float(self.df_clean["daily_demand"].mean()), 2),
+            "std_daily_demand": round(float(self.df_clean["daily_demand"].std()), 2),
+            "min_daily_demand": float(self.df_clean["daily_demand"].min()),
+            "max_daily_demand": float(self.df_clean["daily_demand"].max()),
         }
-        # Phase 6: Add weather/festival coverage stats when available
-        if "is_festival_day" in self.df_clean.columns:
-            n = len(self.df_clean)
-            stats["festival_day_pct"] = round(
-                self.df_clean["is_festival_day"].astype(float).sum() / max(n, 1) * 100, 2
-            )
-        if "extreme_weather_flag" in self.df_clean.columns:
-            n = len(self.df_clean)
-            stats["extreme_weather_pct"] = round(
-                self.df_clean["extreme_weather_flag"].astype(float).sum() / max(n, 1) * 100, 2
-            )
-        if "is_shopping_season" in self.df_clean.columns:
-            n = len(self.df_clean)
-            stats["shopping_season_pct"] = round(
-                self.df_clean["is_shopping_season"].astype(float).sum() / max(n, 1) * 100, 2
-            )
-        if "weather_demand_multiplier" in self.df_clean.columns:
-            stats["avg_weather_demand_multiplier"] = round(
-                self.df_clean["weather_demand_multiplier"].mean(), 4
-            )
         return stats
 
 
 def main():
-    """Main execution"""
     print("=" * 70)
     print("INVENTORY DEMAND FORECASTING - DATA PREPARATION")
     print("=" * 70)
 
     dp = DataPreparation()
-
     (dp.load_data().explore_data().clean_data().feature_engineering().create_train_val_test_splits())
 
     stats = dp.get_summary_stats()
@@ -300,25 +175,15 @@ def main():
     print("DATA SUMMARY")
     print("=" * 70)
     for key, value in stats.items():
-        if isinstance(value, float):
-            print(f"{key:.<40} {value:.2f}")
-        else:
-            print(f"{key:.<40} {value}")
+        print(f"{key:.<40} {value}")
 
     out_dir = os.path.dirname(__file__)
     print("\n[SAVE] Saving processed datasets...")
-    # NOTE: switched from .to_parquet()/.read_parquet() to
-    # .to_pickle()/.read_pickle(). Parquet requires the `pyarrow` or
-    # `fastparquet` package, and NEITHER is listed in requirements.txt -
-    # so the original code would fail with an ImportError the first time
-    # it tried to save, even in the real environment. Pickle needs no
-    # extra dependency and preserves dtypes exactly (important for the
-    # `date` column).
     dp.df_clean.to_pickle(os.path.join(out_dir, "data_clean.pkl"))
     dp.train_df.to_pickle(os.path.join(out_dir, "train_data.pkl"))
     dp.val_df.to_pickle(os.path.join(out_dir, "val_data.pkl"))
     dp.test_df.to_pickle(os.path.join(out_dir, "test_data.pkl"))
-    print("\u2713 All data saved (pickle format)")
+    print("[OK] All data saved (pickle format)")
 
     return dp
 

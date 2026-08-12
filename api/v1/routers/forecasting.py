@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime, timezone
+from calendar import monthrange
+from datetime import date, datetime, timezone, timedelta
+from pathlib import Path as PathlibPath
 from typing import Any, Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from api.core.dependencies import get_app_state, get_forecast_service
 from api.core.state import AppState
@@ -50,6 +52,7 @@ from api.v1.schemas.forecasting import (
     ArtifactPaths,
 )
 from api.v1.services.forecasting_service import ForecastingService
+from utils.csv_loader import CsvInventoryDataLoader
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,688 @@ def _error_response(message: str, errors: List[str], status_code: int = 500) -> 
     return JSONResponse(
         status_code=status_code,
         content=ErrorResponse(message=message, errors=errors).model_dump(),
+    )
+
+
+def _get_country_code_from_state_code(state_code: str | None) -> str:
+    if not state_code:
+        return "US"
+    if "-" in state_code:
+        return state_code.split("-")[0].upper()
+    return state_code.upper()
+
+
+def _parse_optional_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return datetime.fromisoformat(str(value)).date()
+    except (TypeError, ValueError):
+        try:
+            return datetime.strptime(str(value).strip(), "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            return None
+
+
+def _same_annual_day(start_date: date | None, end_date: date | None, target_date: date) -> bool:
+    if start_date is None:
+        return False
+    if end_date is None:
+        end_date = start_date
+    if start_date.month != target_date.month or end_date.month != target_date.month:
+        return False
+    return start_date.day <= target_date.day <= end_date.day
+
+
+def _find_festival_calendar_context(
+    festivals: List[Dict[str, Any]],
+    location_id: int,
+    target_date: date,
+) -> Dict[str, Any]:
+    if not festivals:
+        return {}
+
+    # Match location-specific festivals or national festivals
+    relevant_festivals = [
+        row
+        for row in festivals
+        if int(str(row.get("location_id") or 0)) == location_id
+        or str(row.get("festival_type", "")).upper() == "NATIONAL"
+    ]
+    if not relevant_festivals:
+        relevant_festivals = festivals
+
+    nearest_festival = None
+    nearest_distance = None
+
+    for festival in relevant_festivals:
+        raw_start = _parse_optional_date(festival.get("start_date"))
+        raw_end = _parse_optional_date(festival.get("end_date")) or raw_start
+        if raw_start is None:
+            continue
+        if raw_end is None:
+            raw_end = raw_start
+
+        # Map start_date and end_date to target_date's year
+        try:
+            start_date = date(target_date.year, raw_start.month, raw_start.day)
+        except ValueError:
+            start_date = date(target_date.year, raw_start.month, 28)
+
+        try:
+            end_date = date(target_date.year, raw_end.month, raw_end.day)
+        except ValueError:
+            end_date = date(target_date.year, raw_end.month, 28)
+
+        if end_date < start_date:
+            end_date = date(target_date.year + 1, raw_end.month, raw_end.day)
+
+        if start_date <= target_date <= end_date:
+            return {
+                "festival_calendar_name": festival.get("festival_name"),
+                "festival_calendar_type": festival.get("festival_type"),
+                "festival_calendar_demand_lift_pct": float(
+                    str(festival.get("demand_lift_pct", 0.0)) or 0.0
+                ),
+                "festival_calendar_supply_risk_score": float(
+                    str(festival.get("supply_risk_score", 0.0)) or 0.0
+                ),
+                "festival_calendar_start_date": start_date.isoformat(),
+                "festival_calendar_end_date": end_date.isoformat(),
+                "festival_calendar_status": "active",
+                "festival_calendar_proximity_score": 1.0,
+            }
+
+        if target_date < start_date:
+            distance = (start_date - target_date).days
+        else:
+            distance = (target_date - end_date).days
+
+        if nearest_distance is None or distance < nearest_distance:
+            nearest_distance = distance
+            nearest_festival = (festival, start_date, end_date)
+
+    if nearest_festival is not None and nearest_distance is not None and nearest_distance <= 7:
+        festival, start_date, end_date = nearest_festival
+        proximity_score = round(max(0.0, min(1.0, 1.0 - nearest_distance / 7.0)), 2)
+        return {
+            "festival_calendar_name": festival.get("festival_name"),
+            "festival_calendar_type": festival.get("festival_type"),
+            "festival_calendar_demand_lift_pct": float(
+                str(festival.get("demand_lift_pct", 0.0)) or 0.0
+            ),
+            "festival_calendar_supply_risk_score": float(
+                str(festival.get("supply_risk_score", 0.0)) or 0.0
+            ),
+            "festival_calendar_start_date": start_date.isoformat(),
+            "festival_calendar_end_date": end_date.isoformat(),
+            "festival_calendar_status": "proximity",
+            "festival_calendar_proximity_score": proximity_score,
+        }
+
+    return {}
+
+
+def _find_location_climate_profile(
+    profiles: List[Dict[str, Any]],
+    location_id: int,
+) -> Dict[str, Any]:
+    if not profiles:
+        return {}
+    return next(
+        (
+            profile
+            for profile in profiles
+            if int(str(profile.get("location_id") or 0)) == location_id
+        ),
+        {},
+    )
+
+
+def _resolve_timeline_events(
+    ctx: Dict[str, Any],
+    festival_ctx: Dict[str, Any],
+    climate_profile: Dict[str, Any],
+    current_date: date,
+) -> List[Dict[str, str]]:
+    festival_score = float(str(ctx.get("festival_proximity_score", 0.0)) or 0.0)
+    weather_severity = float(str(ctx.get("weather_severity_index", 0.0)) or 0.0)
+    events: List[Dict[str, str]] = []
+
+    if festival_ctx.get("festival_calendar_status") == "active":
+        festival_name = festival_ctx.get("festival_calendar_name") or "Festival"
+        festival_type = festival_ctx.get("festival_calendar_type") or "Festival"
+        events.append(
+            {
+                "event_type": "festival",
+                "event_detail": f"{festival_name} ({festival_type})",
+            }
+        )
+    elif festival_ctx.get("festival_calendar_status") == "proximity":
+        proximity_score = float(
+            str(festival_ctx.get("festival_calendar_proximity_score", 0.0)) or 0.0
+        )
+        if proximity_score >= 0.5:
+            festival_name = festival_ctx.get("festival_calendar_name") or "Festival"
+            events.append(
+                {
+                    "event_type": "festival",
+                    "event_detail": f"{festival_name} proximity {proximity_score:.2f}",
+                }
+            )
+
+    weather_flags = any(
+        str(ctx.get(k, 0)) in ("1", "True", "true")
+        for k in [
+            "heatwave_flag",
+            "coldwave_flag",
+            "monsoon_flag",
+            "heavy_rain_flag",
+            "extreme_weather_flag",
+        ]
+    )
+    if weather_flags or weather_severity >= 0.75:
+        events.append(
+            {
+                "event_type": "weather",
+                "event_detail": f"Weather Extreme (severity={weather_severity:.2f})",
+            }
+        )
+
+    # Treat Friday, Saturday, Sunday as weekend-style demand (Friday included)
+    if current_date.weekday() >= 4:
+        events.append({"event_type": "weekend", "event_detail": "Weekend"})
+
+    return events
+
+
+def _advance_timeline_date(current_date: date, horizon: str) -> date:
+    if horizon == "monthly":
+        next_month = current_date.month + 1
+        next_year = current_date.year + (next_month - 1) // 12
+        next_month = (next_month - 1) % 12 + 1
+        next_day = min(current_date.day, monthrange(next_year, next_month)[1])
+        return current_date.replace(year=next_year, month=next_month, day=next_day)
+    if horizon == "3-months":
+        new_month = current_date.month + 3
+        new_year = current_date.year + (new_month - 1) // 12
+        new_month = (new_month - 1) % 12 + 1
+        new_day = min(current_date.day, monthrange(new_year, new_month)[1])
+        return current_date.replace(year=new_year, month=new_month, day=new_day)
+    if horizon == "6-months":
+        new_month = current_date.month + 6
+        new_year = current_date.year + (new_month - 1) // 12
+        new_month = (new_month - 1) % 12 + 1
+        new_day = min(current_date.day, monthrange(new_year, new_month)[1])
+        return current_date.replace(year=new_year, month=new_month, day=new_day)
+    if horizon == "yearly":
+        try:
+            return current_date.replace(year=current_date.year + 1)
+        except ValueError:
+            return current_date.replace(year=current_date.year + 1, day=28)
+    return current_date + timedelta(days={"1-day": 1, "7-day": 7, "14-day": 14, "30-day": 30}.get(horizon, 1))
+
+
+def _build_timeline_dates(start_date: date, horizon: str) -> List[date]:
+    """Return a list of dates to render for the given horizon.
+
+    Rules:
+    - '1-day'  : today and tomorrow (2 points)
+    - '7-day'  : today through next Thursday (8 points)
+    - '14-day' : today through day 14 inclusive (15 points)
+    - '30-day' : today through day 30 inclusive (31 points)
+    - 'monthly','3-months','6-months','yearly': sequence of 8 anchors spaced by horizon increments
+    """
+    if horizon == "1-day":
+        return [start_date + timedelta(days=i) for i in range(2)]
+    if horizon == "7-day":
+        return [start_date + timedelta(days=i) for i in range(8)]
+    if horizon == "14-day":
+        return [start_date + timedelta(days=i) for i in range(15)]
+    if horizon == "30-day":
+        return [start_date + timedelta(days=i) for i in range(31)]
+
+    anchors = []
+    cur = start_date
+    for _ in range(8):
+        anchors.append(cur)
+        cur = _advance_timeline_date(cur, horizon)
+    return anchors
+
+
+def _build_timeline_dates_with_festivals(
+    start_date: date,
+    horizon: str,
+    festivals: List[Dict[str, Any]],
+    location_id: int,
+) -> List[date]:
+    base_dates = _build_timeline_dates(start_date, horizon)
+    if not festivals or horizon in ("1-day", "7-day", "14-day", "30-day"):
+        return base_dates
+
+    max_date = base_dates[-1]
+    years_to_check = set(range(start_date.year, max_date.year + 1))
+
+    festival_dates = set()
+    relevant_festivals = [
+        row for row in festivals
+        if int(str(row.get("location_id") or 0)) == location_id
+        or str(row.get("festival_type", "")).upper() == "NATIONAL"
+    ]
+    if not relevant_festivals:
+        relevant_festivals = festivals
+
+    for fest in relevant_festivals:
+        raw_start = _parse_optional_date(fest.get("start_date"))
+        raw_end = _parse_optional_date(fest.get("end_date")) or raw_start
+        if raw_start is None:
+            continue
+        if raw_end is None:
+            raw_end = raw_start
+
+        for y in years_to_check:
+            try:
+                f_start = date(y, raw_start.month, raw_start.day)
+            except ValueError:
+                f_start = date(y, raw_start.month, 28)
+
+            try:
+                f_end = date(y, raw_end.month, raw_end.day)
+            except ValueError:
+                f_end = date(y, raw_end.month, 28)
+
+            if start_date <= f_start <= max_date:
+                festival_dates.add(f_start)
+            if start_date <= f_end <= max_date:
+                festival_dates.add(f_end)
+
+    return sorted(list(set(base_dates).union(festival_dates)))
+
+
+@router.get(
+    "/frontend/options",
+    summary="Frontend demo options",
+    description="Returns products, locations, and warehouses for the demand graph demo UI.",
+    tags=[_TAG],
+)
+async def get_frontend_options() -> JSONResponse:
+    loader = CsvInventoryDataLoader()
+    products = loader.load_products()
+    locations = loader.load_locations()
+    warehouses = loader.load_distribution_centers()
+
+    payload = {
+        "products": [
+            {
+                "id": item.get("sku_id"),
+                "name": item.get("product_name") or item.get("product_code") or f"Product {item.get('sku_id')}",
+                "code": item.get("product_code"),
+            }
+            for item in products
+            if item.get("sku_id") is not None
+        ],
+        "locations": [
+            {
+                "id": item.get("location_id"),
+                "name": item.get("location_name") or item.get("city") or f"Location {item.get('location_id')}",
+                "city": item.get("city"),
+            }
+            for item in locations
+        ],
+        "warehouses": [
+            {
+                "id": item.get("dc_id"),
+                "name": item.get("dc_name") or f"Warehouse {item.get('dc_id')}",
+                "city": item.get("city"),
+            }
+            for item in warehouses
+        ],
+        # mapping of location_id -> list of warehouse ids that serve that location
+    }
+
+    # build a mapping of location_id -> list of warehouse ids by location country fallback
+    try:
+        states = loader.load_states()
+        state_country = {
+            s.get("state_id"): _get_country_code_from_state_code(s.get("state_abbrev") or s.get("state_code"))
+            for s in states
+        }
+        loc_map = {}
+        for loc in locations:
+            lid = loc.get("location_id")
+            state = loc.get("state_id")
+            if lid is None:
+                continue
+            location_country = state_country.get(state)
+            loc_map[str(lid)] = [
+                w.get("dc_id")
+                for w in warehouses
+                if w.get("state_id") == state
+                or (location_country is not None and state_country.get(w.get("state_id")) == location_country)
+            ]
+        payload["location_warehouses"] = loc_map
+    except Exception:
+        payload["location_warehouses"] = {}
+    return JSONResponse(content=payload)
+
+
+def _find_weather_festival_context(
+    loader: CsvInventoryDataLoader,
+    product_id: int,
+    location_id: int,
+    target_date: datetime.date,
+) -> Dict[str, Any]:
+    try:
+        rows = loader.load_demand_context_fact()
+        candidates = [
+            row
+            for row in rows
+            if row.get("product_id") == product_id and row.get("location_id") == location_id
+        ]
+        if not candidates:
+            return {}
+
+        def _event_strength(row: Dict[str, Any]) -> float:
+            festival_score = float(str(row.get("festival_proximity_score", 0.0)) or 0.0)
+            weather_severity = float(str(row.get("weather_severity_index", 0.0)) or 0.0)
+            flags = any(
+                str(row.get(key, 0)) in ("1", "True", "true")
+                for key in [
+                    "heatwave_flag",
+                    "coldwave_flag",
+                    "monsoon_flag",
+                    "heavy_rain_flag",
+                    "extreme_weather_flag",
+                ]
+            )
+            festival_flag = str(row.get("is_festival_day", 0)) in ("1", "True", "true")
+            return (1.0 if festival_flag else 0.0) + (1.0 if flags else 0.0) + festival_score + weather_severity
+
+        exact = [
+            row
+            for row in candidates
+            if _parse_optional_date(row.get("date")) == target_date
+        ]
+        context_row = exact[0] if exact else None
+
+        if not context_row:
+            same_month_day_rows = [
+                row
+                for row in candidates
+                if _parse_optional_date(row.get("date")) is not None
+                and _parse_optional_date(row.get("date")).month == target_date.month
+                and _parse_optional_date(row.get("date")).day == target_date.day
+            ]
+            if same_month_day_rows:
+                context_row = max(same_month_day_rows, key=_event_strength)
+
+        if not context_row:
+            dated_rows = [
+                row
+                for row in candidates
+                if _parse_optional_date(row.get("date")) is not None
+            ]
+            nearest_row = min(
+                dated_rows,
+                key=lambda r: abs((_parse_optional_date(r.get("date")) - target_date).days),
+            ) if dated_rows else None
+            if nearest_row is not None:
+                nearest_date = _parse_optional_date(nearest_row.get("date"))
+                if abs((nearest_date - target_date).days) <= 7:
+                    context_row = nearest_row
+
+        if not context_row:
+            return {}
+
+        if _event_strength(context_row) <= 0.0:
+            return {}
+
+        return {
+            "weather_demand_multiplier": context_row.get("weather_demand_multiplier"),
+            "weather_severity_index": context_row.get("weather_severity_index"),
+            "is_festival_day": context_row.get("is_festival_day"),
+            "festival_proximity_score": context_row.get("festival_proximity_score"),
+            "is_shopping_season": context_row.get("is_shopping_season"),
+            "supply_disruption_risk": context_row.get("supply_disruption_risk"),
+            "climate_anomaly_score": context_row.get("climate_anomaly_score"),
+            "regional_demand_index": context_row.get("regional_demand_index"),
+        }
+    except Exception:
+        return {}
+
+
+@router.get(
+    "/frontend/demo",
+    summary="Frontend demo page",
+    description="Serves the HTML demo page for exploring demand horizons in a browser.",
+    tags=[_TAG],
+)
+async def get_frontend_demo_page() -> FileResponse:
+    html_path = PathlibPath(__file__).resolve().parents[3] / "frontend" / "demand_graph_demo.html"
+    return FileResponse(html_path, media_type="text/html")
+
+
+@router.get(
+    "/frontend/horizon-graph",
+    summary="Demand graph data for the frontend demo",
+    description="Generates 7-day, 14-day, 30-day, 90-day, and 365-day demand points using the forecasting model.",
+    tags=[_TAG],
+)
+async def get_frontend_horizon_graph(
+    product_id: int,
+    location_id: int,
+    warehouse_id: int | None = None,
+    svc: ForecastingService = Depends(get_forecast_service),
+) -> JSONResponse:
+    loader = CsvInventoryDataLoader()
+    products = {item.get("sku_id"): item for item in loader.load_products()}
+    locations = {item.get("location_id"): item for item in loader.load_locations()}
+    warehouses = {item.get("dc_id"): item for item in loader.load_distribution_centers()}
+    positions = list(loader.load_inventory_positions())
+
+    product = products.get(product_id, {})
+    location = locations.get(location_id, {})
+    warehouse = warehouses.get(warehouse_id) if warehouse_id is not None else None
+
+    matching_position = next(
+        (
+            pos
+            for pos in positions
+            if getattr(pos, "sku_id", None) == product_id and getattr(pos, "location_id", None) == location_id
+        ),
+        None,
+    )
+
+    payload = {
+        "product_id": product_id,
+        "location_id": location_id,
+        "on_hand_qty": getattr(matching_position, "on_hand_qty", 0) if matching_position else 0,
+        "allocated_qty": getattr(matching_position, "allocated_qty", 0) if matching_position else 0,
+        "safety_stock_qty": getattr(matching_position, "safety_stock_qty", 0) if matching_position else 0,
+        "reorder_point_qty": getattr(matching_position, "reorder_point_qty", 0) if matching_position else 0,
+        "avg_retail_price": float(product.get("avg_retail_price", 0) or 0),
+        "annual_units_max": int(product.get("annual_units_max", 10000) or 10000),
+        "category_id": int(product.get("category_id", 0) or 0),
+        "velocity_class_id": int(product.get("velocity_class_id", 0) or 0),
+        "is_promotional": False,
+    }
+
+    base_date = datetime.now().date()
+    horizons = [
+        ("7-day", 7),
+        ("14-day", 14),
+        ("30-day", 30),
+        ("90-day", 90),
+        ("365-day", 365),
+    ]
+    series = []
+    for label, horizon in horizons:
+        target_date = base_date + timedelta(days=horizon)
+        horizon_payload = {
+            **payload,
+            "date": target_date.isoformat(),
+            **_find_weather_festival_context(loader, product_id, location_id, target_date),
+        }
+        result = svc.predict_single(horizon_payload, horizon=horizon)
+        series.append(
+            {
+                "label": label,
+                "days": horizon,
+                "forecast": round(result.get("predicted_demand", 0), 2),
+                "confidence": round(result.get("confidence_score", 90.0), 2),
+            }
+        )
+
+    return JSONResponse(
+        content={
+            "product": {"id": product_id, "name": product.get("product_name") or product.get("product_code")},
+            "location": {"id": location_id, "name": location.get("location_name") or location.get("city")},
+            "warehouse": {"id": warehouse_id, "name": warehouse.get("dc_name") if warehouse else None},
+            "series": series,
+        }
+    )
+
+
+@router.get(
+    "/frontend/timeline-graph",
+    summary="Demand timeline data for the frontend demo",
+    description=(
+        "Generates a demand forecast timeline from today onward using the selected forecast horizon."
+    ),
+    tags=[_TAG],
+)
+async def get_frontend_timeline_graph(
+    product_id: int,
+    location_id: int,
+    warehouse_id: int | None = None,
+    horizon: str = "1-day",
+    svc: ForecastingService = Depends(get_forecast_service),
+) -> JSONResponse:
+    valid_horizons = {
+        "1-day": 1,
+        "7-day": 7,
+        "14-day": 14,
+        "30-day": 30,
+        "monthly": 30,
+        "3-months": 90,
+        "6-months": 180,
+        "yearly": 365,
+    }
+    if horizon not in valid_horizons:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported horizon '{horizon}'. Valid options are: {', '.join(valid_horizons)}.",
+        )
+
+    loader = CsvInventoryDataLoader()
+    products = {item.get("sku_id"): item for item in loader.load_products()}
+    locations = {item.get("location_id"): item for item in loader.load_locations()}
+    warehouses = {item.get("dc_id"): item for item in loader.load_distribution_centers()}
+    positions = list(loader.load_inventory_positions())
+    in_transit_inventory = loader.load_in_transit_inventory()
+
+    product = products.get(product_id, {})
+    location = locations.get(location_id, {})
+    warehouse = warehouses.get(warehouse_id) if warehouse_id is not None else None
+
+    matching_position = next(
+        (
+            pos
+            for pos in positions
+            if getattr(pos, "sku_id", None) == product_id and getattr(pos, "location_id", None) == location_id
+        ),
+        None,
+    )
+
+    in_transit_qty = sum(
+        item.get("quantity_in_transit", 0)
+        for item in in_transit_inventory
+        if int(item.get("sku_id", 0)) == product_id and int(item.get("location_id", 0)) == location_id
+    )
+
+    payload = {
+        "product_id": product_id,
+        "location_id": location_id,
+        "on_hand_qty": getattr(matching_position, "on_hand_qty", 0) if matching_position else 0,
+        "allocated_qty": getattr(matching_position, "allocated_qty", 0) if matching_position else 0,
+        "safety_stock_qty": getattr(matching_position, "safety_stock_qty", 0) if matching_position else 0,
+        "reorder_point_qty": getattr(matching_position, "reorder_point_qty", 0) if matching_position else 0,
+        "avg_retail_price": float(product.get("avg_retail_price", 0) or 0),
+        "annual_units_max": int(product.get("annual_units_max", 10000) or 10000),
+        "category_id": int(product.get("category_id", 0) or 0),
+        "velocity_class_id": int(product.get("velocity_class_id", 0) or 0),
+        "is_promotional": False,
+    }
+
+    series = []
+    start_date = datetime.now().date()
+    festival_calendar = loader.load_festival_calendar()
+    climate_profiles = loader.load_location_climate_profile()
+    timeline_dates = _build_timeline_dates_with_festivals(start_date, horizon, festival_calendar, location_id)
+
+    for current_date in timeline_dates:
+        ctx = _find_weather_festival_context(loader, product_id, location_id, current_date)
+        festival_ctx = _find_festival_calendar_context(festival_calendar, location_id, current_date)
+        climate_profile = _find_location_climate_profile(climate_profiles, location_id)
+
+        timeline_payload = {
+            **payload,
+            "date": current_date.isoformat(),
+            **ctx,
+        }
+        if festival_ctx.get("festival_calendar_status") == "active":
+            timeline_payload["is_festival_day"] = True
+            timeline_payload["festival_proximity_score"] = 1.0
+            timeline_payload["festival_demand_lift_pct"] = festival_ctx.get("festival_calendar_demand_lift_pct", 0.0)
+        elif festival_ctx.get("festival_calendar_status") == "proximity":
+            timeline_payload["festival_proximity_score"] = festival_ctx.get("festival_calendar_proximity_score", 0.0)
+            timeline_payload["festival_demand_lift_pct"] = festival_ctx.get("festival_calendar_demand_lift_pct", 0.0)
+
+        result = svc.predict_single(timeline_payload, horizon=1)
+        events = _resolve_timeline_events(ctx, festival_ctx, climate_profile, current_date)
+        event_type = events[0]["event_type"] if events else ""
+        event_detail = events[0]["event_detail"] if events else ""
+
+        series.append(
+            {
+                "date": current_date.isoformat(),
+                "forecast": round(result.get("predicted_demand", 0), 2),
+                "confidence": round(result.get("confidence_score", 90.0), 2),
+                "event_type": event_type,
+                "event_detail": event_detail,
+                "event_types": [event.get("event_type") for event in events],
+                "event_details": [event.get("event_detail") for event in events],
+            }
+        )
+
+    return JSONResponse(
+        content={
+            "product": {
+                "id": product_id,
+                "name": product.get("product_name") or product.get("product_code"),
+                "category_id": int(product.get("category_id", 0) or 0),
+                "velocity_class": product.get("velocity_class"),
+                "unit_cost": float(product.get("unit_cost", 0) or 0),
+                "unit_price": float(product.get("unit_price", 0) or 0),
+                "avg_retail_price": float(product.get("avg_retail_price", 0) or 0),
+                "annual_units_max": int(product.get("annual_units_max", 10000) or 10000),
+            },
+            "location": {"id": location_id, "name": location.get("location_name") or location.get("city")},
+            "warehouse": {"id": warehouse_id, "name": warehouse.get("dc_name") if warehouse else None},
+            "inventory": {
+                "on_hand_qty": getattr(matching_position, "on_hand_qty", 0) if matching_position else 0,
+                "allocated_qty": getattr(matching_position, "allocated_qty", 0) if matching_position else 0,
+                "available_qty": max(0, (getattr(matching_position, "on_hand_qty", 0) if matching_position else 0) - (getattr(matching_position, "allocated_qty", 0) if matching_position else 0)),
+                "safety_stock_qty": getattr(matching_position, "safety_stock_qty", 0) if matching_position else 0,
+                "reorder_point_qty": getattr(matching_position, "reorder_point_qty", 0) if matching_position else 0,
+                "last_counted_date": getattr(matching_position, "last_counted_date", None) if matching_position else None,
+                "in_transit_qty": in_transit_qty,
+            },
+            "selected_horizon": horizon,
+            "series": series,
+        }
     )
 
 
@@ -288,7 +973,35 @@ async def predict_single(
     try:
         payload = request.model_dump()
         horizon = payload.pop("horizon_days", 14)
+        if payload.get("date"):
+            try:
+                target_date = datetime.fromisoformat(str(payload["date"])).date()
+            except Exception:
+                target_date = datetime.now().date()
+            loader = CsvInventoryDataLoader()
+            festival_calendar = loader.load_festival_calendar()
+            festival_ctx = _find_festival_calendar_context(festival_calendar, request.location_id, target_date)
+            if festival_ctx.get("festival_calendar_status") == "active":
+                payload["is_festival_day"] = True
+                payload["festival_proximity_score"] = 1.0
+                payload["festival_demand_lift_pct"] = festival_ctx.get("festival_calendar_demand_lift_pct", 0.0)
+            elif festival_ctx.get("festival_calendar_status") == "proximity":
+                payload["festival_proximity_score"] = festival_ctx.get("festival_calendar_proximity_score", 0.0)
+                payload["festival_demand_lift_pct"] = festival_ctx.get("festival_calendar_demand_lift_pct", 0.0)
+
         result = svc.predict_single(payload, horizon=horizon)
+
+        # Resolve event context for the target date and include in response
+        loader = CsvInventoryDataLoader()
+        target_date = _parse_optional_date(payload.get("date")) or datetime.now().date()
+        ctx = _find_weather_festival_context(loader, request.product_id, request.location_id, target_date)
+        festival_calendar = loader.load_festival_calendar()
+        festival_ctx = _find_festival_calendar_context(festival_calendar, request.location_id, target_date)
+        climate_profiles = loader.load_location_climate_profile()
+        climate_profile = _find_location_climate_profile(climate_profiles, request.location_id)
+        events = _resolve_timeline_events(ctx, festival_ctx, climate_profile, target_date)
+        event_type = events[0]["event_type"] if events else ""
+        event_detail = events[0]["event_detail"] if events else ""
 
         data = PredictData(
             product_id=request.product_id,
@@ -299,6 +1012,10 @@ async def predict_single(
             model_used=result["model_used"],
             horizon_days=result["horizon_days"],
             latency_ms=result["latency_ms"],
+            event_type=event_type,
+            event_detail=event_detail,
+            event_types=[e.get("event_type") for e in events],
+            event_details=[e.get("event_detail") for e in events],
         )
         response = ApiResponse[PredictData](
             success=True,
@@ -356,19 +1073,36 @@ async def predict_batch(
         rows = [item.model_dump() for item in request.items]
         predictions = svc.predict_batch(rows)
 
-        items_out = [
-            BatchPredictResultItem(
-                index=p["index"],
-                product_id=p["product_id"],
-                location_id=p["location_id"],
-                predicted_demand=p["predicted_demand"],
-                confidence_score=p["confidence_score"],
-                prediction_interval=PredictionInterval(**p["prediction_interval"]),
-                model_used=p["model_used"],
-                latency_ms=p["latency_ms"],
+        # Enrich each prediction with resolved event context
+        loader = CsvInventoryDataLoader()
+        festival_calendar = loader.load_festival_calendar()
+        climate_profiles = loader.load_location_climate_profile()
+
+        items_out = []
+        for i, p in enumerate(predictions):
+            row = rows[i] if i < len(rows) else {}
+            target_date = _parse_optional_date(row.get("date")) or datetime.now().date()
+            ctx = _find_weather_festival_context(loader, row.get("product_id"), row.get("location_id"), target_date)
+            festival_ctx = _find_festival_calendar_context(festival_calendar, row.get("location_id"), target_date)
+            climate_profile = _find_location_climate_profile(climate_profiles, row.get("location_id"))
+            events = _resolve_timeline_events(ctx, festival_ctx, climate_profile, target_date)
+            event_type = events[0]["event_type"] if events else ""
+            event_detail = events[0]["event_detail"] if events else ""
+
+            items_out.append(
+                BatchPredictResultItem(
+                    index=p["index"],
+                    product_id=p["product_id"],
+                    location_id=p["location_id"],
+                    predicted_demand=p["predicted_demand"],
+                    confidence_score=p["confidence_score"],
+                    prediction_interval=PredictionInterval(**p["prediction_interval"]),
+                    model_used=p["model_used"],
+                    latency_ms=p["latency_ms"],
+                    event_type=event_type,
+                    event_detail=event_detail,
+                )
             )
-            for p in predictions
-        ]
 
         total_latency = round((time.perf_counter() - t0) * 1000, 2)
         data = BatchPredictData(
@@ -441,17 +1175,33 @@ async def generate_forecast(
             base_payload=base_payload,
         )
 
-        forecast_items = [
-            ForecastDayResult(
-                date=d["date"],
-                forecasted_demand=d["forecasted_demand"],
-                confidence=d["confidence"],
-                prediction_interval=PredictionInterval(**d["prediction_interval"]),
-                trend=d["trend"],
-                seasonality=d["seasonality"],
+        # Resolve event context for each forecast day
+        loader = CsvInventoryDataLoader()
+        festival_calendar = loader.load_festival_calendar()
+        climate_profiles = loader.load_location_climate_profile()
+
+        forecast_items = []
+        for d in forecast_days:
+            target_date = _parse_optional_date(d.get("date")) or datetime.now().date()
+            ctx = _find_weather_festival_context(loader, product_id, request.location_id, target_date)
+            festival_ctx = _find_festival_calendar_context(festival_calendar, request.location_id, target_date)
+            climate_profile = _find_location_climate_profile(climate_profiles, request.location_id)
+            events = _resolve_timeline_events(ctx, festival_ctx, climate_profile, target_date)
+            event_type = events[0]["event_type"] if events else ""
+            event_detail = events[0]["event_detail"] if events else ""
+
+            forecast_items.append(
+                ForecastDayResult(
+                    date=d["date"],
+                    forecasted_demand=d["forecasted_demand"],
+                    confidence=d["confidence"],
+                    prediction_interval=PredictionInterval(**d["prediction_interval"]),
+                    trend=d["trend"],
+                    seasonality=d["seasonality"],
+                    event_type=event_type,
+                    event_detail=event_detail,
+                )
             )
-            for d in forecast_days
-        ]
 
         data = ForecastData(
             product_id=product_id,
@@ -613,7 +1363,11 @@ async def inventory_risk(
             current_stock=request.current_stock,
             projected_stock=result["projected_stock"],
             confidence=result["confidence"],
+            days_until_stockout=result["days_until_stockout"],
+            days_until_reorder=result["days_until_reorder"],
+            optimal_reorder_date=result.get("optimal_reorder_date"),
         )
+
         response = ApiResponse[RiskData](
             success=True,
             message=f"Risk assessment completed: {result['risk_level']}.",

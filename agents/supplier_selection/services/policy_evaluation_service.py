@@ -107,9 +107,10 @@ class PolicyEvaluationService(SupplierSelectionService):
             )
 
         # Check lead time
-        if supplier_evaluation.lead_time_days > policy.max_lead_time_days:
+        lead_time_days = max(1, int(getattr(supplier_evaluation, "lead_time_days", 1) or 1))
+        if lead_time_days > policy.max_lead_time_days:
             issues.append(
-                f"Lead time {supplier_evaluation.lead_time_days} days exceeds maximum {policy.max_lead_time_days}"
+                f"Lead time {lead_time_days} days exceeds maximum {policy.max_lead_time_days}"
             )
 
         is_compliant = len(issues) == 0
@@ -143,9 +144,12 @@ class PolicyEvaluationService(SupplierSelectionService):
         supplier_evaluation.compliance_issues = issues
 
         if not is_compliant:
-            logger.warning(
-                f"Supplier {supplier_evaluation.supplier_name} (ID: {supplier_evaluation.supplier_id}) "
-                f"has {len(issues)} policy violations for order {supplier_evaluation.order_id}"
+            logger.debug(
+                "Supplier %s (ID: %s) has %s policy violations for order %s",
+                supplier_evaluation.supplier_name,
+                supplier_evaluation.supplier_id,
+                len(issues),
+                supplier_evaluation.order_id,
             )
 
         return supplier_evaluation

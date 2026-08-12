@@ -38,19 +38,36 @@ class PolicyAgent:
         updated: List[SupplierEvaluation] = []
         compliant_count = 0
 
-        lowest_cost_map: dict[str, float] = {}
-        # Compute lowest cost per sku/location grouping to allow cost-variance checks
+        order_groups: dict[str, List[SupplierEvaluation]] = {}
         for ev in supplier_evaluations:
-            key = f"{ev.sku_id}:{ev.location_id}"
-            lowest_cost_map[key] = min(lowest_cost_map.get(key, ev.unit_cost), ev.unit_cost)
+            order_key = ev.order_id or f"{ev.sku_id}:{ev.location_id}"
+            order_groups.setdefault(order_key, []).append(ev)
 
-        for ev in supplier_evaluations:
-            key = f"{ev.sku_id}:{ev.location_id}"
-            lowest_cost = lowest_cost_map.get(key, 0.0)
-            updated_ev = self.policy_service.execute(ev, policy_name=policy_name, lowest_cost=lowest_cost)
-            if updated_ev.policy_compliance:
+        for order_key, order_evaluations in order_groups.items():
+            lowest_cost_map: dict[str, float] = {}
+            for ev in order_evaluations:
+                key = f"{ev.sku_id}:{ev.location_id}"
+                lowest_cost_map[key] = min(lowest_cost_map.get(key, ev.unit_cost), ev.unit_cost)
+
+            evaluated_candidates: List[SupplierEvaluation] = []
+            for ev in order_evaluations:
+                key = f"{ev.sku_id}:{ev.location_id}"
+                lowest_cost = lowest_cost_map.get(key, 0.0)
+                updated_ev = self.policy_service.execute(ev, policy_name=policy_name, lowest_cost=lowest_cost)
+                evaluated_candidates.append(updated_ev)
+
+            selected_ev = sorted(
+                evaluated_candidates,
+                key=lambda ev: (
+                    0 if ev.policy_compliance else 1,
+                    -ev.final_score,
+                    ev.total_cost,
+                ),
+            )[0]
+
+            if selected_ev.policy_compliance:
                 compliant_count += 1
-            updated.append(updated_ev)
+            updated.append(selected_ev)
 
         summary = {
             "evaluated": len(updated),

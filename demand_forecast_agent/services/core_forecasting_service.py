@@ -1,38 +1,15 @@
 """
 Consolidated: ModelLoaderService + ForecastService + BatchForecastService +
 ConfidenceService + LoggingService
-(previously 5 separate files)
 
-BUG FIXED HERE (the main reason the demand forecast agent broke at
-inference):
-
-The original `ForecastService.execute()` re-wrapped its input with
-`pd.DataFrame([payload])`, even when `payload` was already the engineered
-DataFrame produced by FeatureEngineeringService. Wrapping a DataFrame
-inside a list and handing it back to `pd.DataFrame(...)` does not do what
-was intended, and `payload["product_id"]` on a DataFrame returns a Series,
-not a scalar - so `item_id=str(payload["product_id"])` was building a
-malformed lookup key for the per-item SARIMAX model.
-
-On top of that, `XGBoostModel.predict()` (training_models/model_training.py)
-recomputed its feature list from whatever columns happened to be present on
-each incoming DataFrame, instead of reindexing onto the fixed column list
-it was actually fit on. A single-row inference payload never has the
-lag/rolling columns that show up during batch training, so the number of
-columns fed into the fitted `StandardScaler`/`XGBRegressor` at inference did
-not match what they were fit on -> shape-mismatch crash.
-
-Fix applied in both places:
-  * ForecastService now takes the already-engineered DataFrame directly
-    (no re-wrapping) and reindexes it onto FeatureEngineeringService.MODEL_FEATURES
-    before calling the model - the exact same reindex step
-    BatchForecastService was already (correctly) doing.
-  * training_models/model_training.py now reindexes onto the same fixed
-    feature list at both fit time and predict time (see that file).
+Updated for event-driven demand forecasting with weather, festival, weekend,
+and warehouse risk multipliers.
 """
+import datetime
 import json
 import os
-import datetime
+import warnings
+from pathlib import Path
 
 import pandas as pd
 
@@ -45,11 +22,8 @@ class ModelLoaderService:
 
     @classmethod
     def load(cls):
-
         if cls._instance:
             return cls._instance
-
-        from pathlib import Path
 
         path = Path(os.getenv("MODEL_PATH", "training_models/hybrid_model.pkl"))
 
@@ -58,8 +32,9 @@ class ModelLoaderService:
 
         import joblib
 
-        cls._instance = joblib.load(path)
-
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            cls._instance = joblib.load(path)
         return cls._instance
 
     @classmethod
@@ -70,13 +45,31 @@ class ModelLoaderService:
 
 class ConfidenceService:
 
+    @staticmethod
+    def _normalise_confidence(raw_confidence):
+        try:
+            confidence = float(str(raw_confidence).strip().rstrip("%"))
+        except (TypeError, ValueError):
+            return 90.0
+
+        if 0 <= confidence <= 1:
+            confidence *= 100.0
+
+        if confidence < 0:
+            confidence = 0.0
+        elif confidence > 100:
+            confidence = 100.0
+
+        return round(confidence, 2)
+
     def execute(self):
         metrics_path = os.getenv("METRICS_PATH", "training_models/model_metrics.json")
         if metrics_path and os.path.exists(metrics_path):
             try:
                 with open(metrics_path, "r", encoding="utf-8") as f:
                     metrics = json.load(f)
-                return round(metrics.get("test_metrics", {}).get("Accuracy_pct", 90.0), 2)
+                raw_confidence = metrics.get("test_metrics", {}).get("Accuracy_pct", 90.0)
+                return self._normalise_confidence(raw_confidence)
             except Exception:
                 pass
         return 90.0
@@ -88,16 +81,68 @@ class ForecastService:
         self.model = ModelLoaderService.load()
         self.engineer = FeatureEngineeringService()
 
+    def _contextual_forecast(self, engineered_df: pd.DataFrame, horizon, product_id):
+        """Blend model inference with weather, festival, and weekend context."""
+        if engineered_df is None or engineered_df.empty:
+            return None
+
+        try:
+            row = engineered_df.iloc[0]
+            product_id = int(product_id)
+            location_id = int(row.get("location_id", 0) or 0)
+
+            context_path = Path(
+                os.getenv(
+                    "DB6_CONTEXT_PATH",
+                    "data/csv_exports/db6_csv_export/demand_context_fact.csv",
+                )
+            )
+            anchor = 25.0
+            if context_path.exists():
+                try:
+                    context_df = pd.read_csv(context_path)
+                    candidates = context_df[
+                        (context_df["product_id"].astype(int) == product_id)
+                        & (context_df["location_id"].astype(int) == location_id)
+                    ]
+                    if not candidates.empty:
+                        context_row = candidates.iloc[0]
+                        for key in [
+                            "weather_adjusted_demand",
+                            "regional_adjusted_demand",
+                            "daily_demand_pre_festival_adjustment",
+                        ]:
+                            if key in context_row.index and pd.notna(context_row.get(key)):
+                                val = float(context_row.get(key))
+                                if val > 0:
+                                    anchor = val
+                                    break
+                except Exception:
+                    pass
+
+            multiplier = 1.0
+            if "festival_demand_lift_pct" in row.index and float(row.get("festival_demand_lift_pct", 0.0) or 0.0) > 0:
+                lift = float(row.get("festival_demand_lift_pct", 0.0))
+                multiplier *= 1.0 + (lift / 100.0)
+            elif "is_festival_day_int" in row.index and float(row.get("is_festival_day_int", 0) or 0) == 1:
+                multiplier *= 1.45
+
+            if "weather_demand_multiplier" in row.index:
+                multiplier *= max(0.5, float(row.get("weather_demand_multiplier", 1.0) or 1.0))
+            if "festival_proximity_score" in row.index:
+                multiplier *= 1.0 + (float(row.get("festival_proximity_score", 0.0) or 0.0) * 0.6)
+            if "is_shopping_season_int" in row.index:
+                multiplier *= 1.0 + (float(row.get("is_shopping_season_int", 0) or 0) * 0.2)
+            if "is_weekend" in row.index and float(row.get("is_weekend", 0) or 0) == 1:
+                multiplier *= 1.25
+            if "supply_disruption_risk" in row.index:
+                multiplier *= 1.0 + (float(row.get("supply_disruption_risk", 0.0) or 0.0) * 0.15)
+
+            return round(max(1.0, anchor * multiplier), 2)
+        except Exception:
+            return None
+
     def execute(self, engineered_df: pd.DataFrame, horizon, product_id):
-        """
-        Args:
-            engineered_df: the already feature-engineered single-row
-                DataFrame produced by FeatureEngineeringService.execute().
-            horizon: forecast horizon in days.
-            product_id: the product id, passed explicitly (not pulled back
-                out of the DataFrame) so there is no ambiguity about
-                scalar vs. Series.
-        """
         try:
             model_input = self.engineer.to_model_matrix(engineered_df)
 
@@ -106,10 +151,26 @@ class ForecastService:
                 steps_ahead=horizon,
                 item_id=str(product_id),
             )
+            model_forecast = round(float(prediction.mean()), 2)
+            contextual_forecast = self._contextual_forecast(engineered_df, horizon, product_id)
+
+            if contextual_forecast is None:
+                forecast = model_forecast
+            else:
+                forecast = round((model_forecast * 0.6) + (contextual_forecast * 0.4), 2)
+
+            # Apply explicit festival demand lift override if present
+            if engineered_df is not None and not engineered_df.empty:
+                row = engineered_df.iloc[0]
+                lift = float(row.get("festival_demand_lift_pct", 0.0) or 0.0)
+                if lift > 0:
+                    forecast = round(forecast * (1.0 + lift / 100.0), 2)
+                elif float(row.get("is_festival_day_int", 0) or 0) == 1:
+                    forecast = round(forecast * 1.4, 2)
 
             return {
                 "status": "SUCCESS",
-                "forecast": round(float(prediction.mean()), 2),
+                "forecast": max(1.0, forecast),
             }
 
         except Exception as e:
@@ -120,41 +181,20 @@ class ForecastService:
 
 
 class BatchForecastService:
-    """Batch/bulk scoring path - deliberately XGBoost-only (no per-item
-    SARIMAX lookups), since SARIMAX in this codebase is fit per product_id
-    and calling it per-row for a large batch would be far too slow for a
-    bulk endpoint. This mirrors how HybridDemandForecaster.forecast() itself
-    falls back to the XGBoost-only prediction whenever no SARIMAX model
-    exists for a given product.
-
-    BUG FIXED: this used to call `model.predict(df)` directly on the
-    *loaded* model object, but ModelLoaderService.load() returns the
-    HybridDemandForecaster, which only exposes `.forecast(df, steps_ahead,
-    item_id)` - it has no `.predict()` method. `.predict()` lives on the
-    inner `.xgboost_model`. Calling `.predict()` on the wrong object raised
-    an AttributeError on every batch request.
-    """
 
     def execute(self, model, rows, features, engineer):
-
         df = pd.DataFrame(rows)
-
         df = engineer.execute(df)
-
         df = df.reindex(columns=features, fill_value=0)
-
         xgb_model = getattr(model, "xgboost_model", model)
         pred = xgb_model.predict(df)
-
-        return [round(float(i), 2) for i in pred]
+        return [round(max(1.0, float(i)), 2) for i in pred]
 
 
 class LoggingService:
 
     def execute(self, payload):
-
         ts = datetime.datetime.now().isoformat()
-
         print("\n===== FORECAST LOG =====")
         print(ts)
         print(json.dumps(payload, indent=2, default=str))

@@ -290,7 +290,7 @@ class SupplierSelectionAgent:
         supplier = self.suppliers_by_id.get(supplier_id)
         if supplier:
             try:
-                return int(supplier.get("lead_time_days", 7))
+                return max(1, int(supplier.get("lead_time_days", 7) or 7))
             except (TypeError, ValueError):
                 return 7
         return 7  # Default
@@ -311,7 +311,7 @@ class SupplierSelectionAgent:
         
         unique_suppliers = len(set(s.selected_supplier_id for s in selections))
         avg_lead_time = (
-            sum(s.lead_time_days for s in selections) / len(selections)
+            sum(max(1, int(s.lead_time_days or 1)) for s in selections) / len(selections)
             if selections else 0
         )
         

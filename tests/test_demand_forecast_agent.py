@@ -43,6 +43,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -270,6 +271,23 @@ def run():
     if check("metrics file exists", metrics_path_exists):
         conf = ConfidenceService().execute()
         check("confidence is a plausible percentage (0-100)", 0 <= conf <= 100, str(conf))
+
+        # Regression test: if metrics store a malformed or out-of-range value,
+        # the service should still return a valid percentage.
+        original_metrics_path = os.environ.get("METRICS_PATH")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bad_metrics_path = os.path.join(tmpdir, "bad_metrics.json")
+            with open(bad_metrics_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "test_metrics": {"Accuracy_pct": 9473},
+                }, f)
+            os.environ["METRICS_PATH"] = bad_metrics_path
+            bad_conf = ConfidenceService().execute()
+            check("confidence clamps out-of-range metrics to 0-100", 0 <= bad_conf <= 100, str(bad_conf))
+        if original_metrics_path is not None:
+            os.environ["METRICS_PATH"] = original_metrics_path
+        else:
+            os.environ.pop("METRICS_PATH", None)
 
     # ------------------------------------------------------------------
     # 8. InventoryDecisionService / ReorderService

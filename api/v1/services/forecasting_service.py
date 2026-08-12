@@ -158,10 +158,52 @@ class ForecastingService:
     def _base_confidence(self) -> float:
         """Return test accuracy from metrics JSON as baseline confidence score."""
         metrics = self._get_metrics_data()
-        return round(metrics.get("test_metrics", {}).get("Accuracy_pct", 90.0), 2)
+        raw_confidence = metrics.get("test_metrics", {}).get("Accuracy_pct", 90.0)
+
+        try:
+            confidence = float(str(raw_confidence).strip().rstrip("%"))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Invalid confidence value in metrics JSON: %r. Falling back to 90.0.",
+                raw_confidence,
+            )
+            return 90.0
+
+        if 0 <= confidence <= 1:
+            confidence *= 100.0
+
+        if confidence < 0:
+            logger.warning(
+                "Confidence value below 0%% in metrics JSON: %r. Clamping to 0.0.",
+                raw_confidence,
+            )
+            confidence = 0.0
+        elif confidence > 100:
+            logger.warning(
+                "Confidence value above 100%% in metrics JSON: %r. Clamping to 100.0.",
+                raw_confidence,
+            )
+            confidence = 100.0
+
+        return min(100.0, round(confidence, 2))
 
     def _build_inference_payload(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """Normalise an incoming request dict into the shape FeatureEngineeringService expects."""
+        # Determine weekend flag (treat Friday, Saturday, Sunday as weekend-style demand)
+        date_str = item.get("date")
+        inferred_date = None
+        if date_str:
+            try:
+                inferred_date = datetime.fromisoformat(str(date_str)).date()
+            except Exception:
+                try:
+                    inferred_date = datetime.strptime(str(date_str).strip(), "%Y-%m-%d").date()
+                except Exception:
+                    inferred_date = None
+        if inferred_date is None:
+            inferred_date = datetime.now().date()
+        is_weekend = inferred_date.weekday() >= 4
+
         return {
             "product_id": item.get("product_id", 0),
             "location_id": item.get("location_id", 0),
@@ -170,6 +212,7 @@ class ForecastingService:
             "safety_stock_qty": item.get("safety_stock_qty", 0),
             "reorder_point_qty": item.get("reorder_point_qty", 0),
             "date": item.get("date"),
+            "is_weekend": is_weekend,
             "is_promotional": item.get("is_promotional", False),
             "annual_units_max": item.get("annual_units_max", 0),
             "avg_retail_price": item.get("avg_retail_price", 0.0),
@@ -183,7 +226,29 @@ class ForecastingService:
             "season_multiplier": item.get("season_multiplier", 1.0),
             "category_id": item.get("category_id", 0),
             "velocity_class_id": item.get("velocity_class_id", 0),
+            "weather_demand_multiplier": item.get("weather_demand_multiplier", 0.0),
+            "weather_severity_index": item.get("weather_severity_index", 0.0),
+            "is_festival_day": item.get("is_festival_day", False),
+            "festival_proximity_score": item.get("festival_proximity_score", 0.0),
+            "is_shopping_season": item.get("is_shopping_season", False),
+            "supply_disruption_risk": item.get("supply_disruption_risk", 0.0),
+            "climate_anomaly_score": item.get("climate_anomaly_score", 0.0),
+            "regional_demand_index": item.get("regional_demand_index", 0.0),
+            "festival_demand_lift_pct": item.get("festival_demand_lift_pct", 0.0),
         }
+
+    def _horizon_scale(self, horizon: int) -> float:
+        if horizon <= 7:
+            return 1.0
+        if horizon <= 14:
+            return 1.06
+        if horizon <= 30:
+            return 1.12
+        if horizon <= 90:
+            return 1.22
+        if horizon <= 180:
+            return 1.30
+        return 1.38
 
     # ------------------------------------------------------------------
     # Public API
@@ -570,6 +635,31 @@ class ForecastingService:
             "LOW": "No immediate action required; monitor stock levels.",
         }
 
+        # Stockout timeline calculations
+        daily_demand = forecasted_demand / max(lead_time_days or 14, 1)
+        if daily_demand > 0:
+            days_until_stockout = math.floor(
+                max(current_stock - safety_stock_qty, 0) / daily_demand
+            )
+            stock_above_reorder = current_stock - reorder_point_qty
+            days_until_reorder = (
+                math.floor(stock_above_reorder / daily_demand)
+                if stock_above_reorder > 0
+                else 0
+            )
+        else:
+            days_until_stockout = 999999
+            days_until_reorder = 999999
+
+        from datetime import date, timedelta
+
+        if days_until_reorder < 999999:
+            optimal_reorder_date = (
+                date.today() + timedelta(days=days_until_reorder)
+            ).isoformat()
+        else:
+            optimal_reorder_date = None
+
         return {
             "risk_level": risk_level,
             "risk_score": risk_score,
@@ -578,7 +668,11 @@ class ForecastingService:
             "forecasted_demand": round(forecasted_demand, 2),
             "projected_stock": round(projected, 2),
             "confidence": self._base_confidence(),
+            "days_until_stockout": days_until_stockout,
+            "days_until_reorder": days_until_reorder,
+            "optimal_reorder_date": optimal_reorder_date,
         }
+
 
     def simulate(
         self,

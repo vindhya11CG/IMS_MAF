@@ -12,7 +12,7 @@ scikit-learn
 xgboost
 statsmodels
 pyarrow
-
+pytest
 python-multipart
  
 pydantic

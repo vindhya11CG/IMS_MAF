@@ -22,6 +22,7 @@ class SupplierMatchingService(ReplenishmentService):
         self.pricing_tiers: List[Dict] = []
         self.category_mappings: List[Dict] = []
         self.product_categories: Dict[int, int] = {}
+        self.product_overrides: List[Dict] = []
         self.performance_metrics: Dict[int, Dict] = {}  # supplier_id -> metrics
         self._load_all_data()
 
@@ -52,6 +53,10 @@ class SupplierMatchingService(ReplenishmentService):
                 if product.get("sku_id") is not None
             }
             logger.info(f"Loaded category mapping for {len(self.product_categories)} SKUs")
+
+            # Load SKU-level product overrides for demo / exception pricing
+            self.product_overrides = self.loader.load_supplier_product_overrides()
+            logger.info(f"Loaded {len(self.product_overrides)} supplier product overrides")
             
             # Load performance metrics
             metrics = self.loader.load_supplier_performance_metrics()
@@ -65,6 +70,21 @@ class SupplierMatchingService(ReplenishmentService):
 
     def _get_unit_cost(self, supplier_id: int, sku_id: int, order_qty: int) -> float:
         """Get unit cost for a supplier-SKU pair based on category pricing tiers."""
+        for override in self.product_overrides:
+            if (
+                override.get("supplier_id") == supplier_id
+                and override.get("sku_id") == sku_id
+            ):
+                override_cost = float(override.get("unit_cost", 0) or 0)
+                if override_cost > 0:
+                    logger.info(
+                        "Using SKU-level override price for supplier %s and SKU %s: $%.2f",
+                        supplier_id,
+                        sku_id,
+                        override_cost,
+                    )
+                    return override_cost
+
         category_id = self.product_categories.get(sku_id)
         if category_id is None:
             logger.warning(f"No category found for SKU {sku_id}")
@@ -151,7 +171,7 @@ class SupplierMatchingService(ReplenishmentService):
                 continue  # Skip if no valid pricing
             
             reliability = self._get_reliability_score(supplier_id)
-            lead_time = supplier.get("lead_time_days", 7)
+            lead_time = max(1, int(supplier.get("lead_time_days", 7) or 7))
             min_order = supplier.get("minimum_order_qty", 1)
             
             # Calculate composite score: lower cost + higher reliability + shorter lead time

@@ -64,16 +64,26 @@ class CsvInventoryDataLoader:
 
         try:
             with file_path.open("r", encoding="utf-8-sig", newline="") as csv_file:
-                reader = csv.DictReader(csv_file)
+                reader = csv.DictReader(csv_file, restval="")
                 if reader.fieldnames is None:
                     logger.error(f"Empty or invalid CSV file: {file_path}")
                     return []
-                    
+
+                fieldnames = [name.strip().lstrip("\ufeff") for name in reader.fieldnames]
                 rows: List[Dict[str, str]] = []
                 for row in reader:
-                    normalized = {key.strip().lstrip("\ufeff"): (value or "") for key, value in row.items()}
+                    normalized: Dict[str, str] = {}
+                    for field in fieldnames:
+                        normalized[field] = ""
+
+                    for raw_key, value in row.items():
+                        if raw_key is None:
+                            continue
+                        key = raw_key.strip().lstrip("\ufeff")
+                        if key in normalized:
+                            normalized[key] = value or ""
                     rows.append(normalized)
-                    
+
                 logger.info(f"Loaded {len(rows)} rows from {file_path.name}")
                 return rows
         except Exception as e:
@@ -347,7 +357,18 @@ class CsvInventoryDataLoader:
 
     def load_distribution_centers(self) -> List[Dict]:
         """Load distribution centers data."""
-        rows = self._read_rows(self.root_dir / "db1_csv_export" / "distribution_centers.csv")
+        candidate_paths = [
+            self.root_dir / "db6_csv_export" / "distribution_centers.csv",
+            self.root_dir / "db1_csv_export" / "distribution_centers.csv",
+        ]
+        rows: List[Dict[str, str]] = []
+        for path in candidate_paths:
+            if not path.exists():
+                continue
+            rows = self._read_rows(path)
+            if rows:
+                break
+
         dcs = []
         for row in rows:
             try:
@@ -559,6 +580,24 @@ class CsvInventoryDataLoader:
                 logger.error(f"Error parsing supplier category mapping row: {e}")
                 continue
         return mappings
+
+    def load_supplier_product_overrides(self) -> List[Dict]:
+        """Load SKU-level override pricing for specific supplier/product combinations."""
+        rows = self._read_rows(self.root_dir / "db4_csv_export" / "supplier_product_pricing.csv")
+        overrides = []
+        for row in rows:
+            try:
+                override = {
+                    "supplier_id": parse_int(row.get("supplier_id")),
+                    "sku_id": parse_int(row.get("sku_id")),
+                    "unit_cost": float(row.get("unit_cost", 0) or 0),
+                    "notes": row.get("notes", "").strip(),
+                }
+                overrides.append(override)
+            except Exception as e:
+                logger.error(f"Error parsing supplier product override row: {e}")
+                continue
+        return overrides
 
     def load_supplier_risk_profile(self) -> List[Dict]:
         """Load supplier risk profiles for supplier evaluation."""

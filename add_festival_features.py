@@ -44,6 +44,7 @@ import numpy as np
 import pandas as pd
 
 try:
+    # pyrefly: ignore [missing-import]
     import holidays as holidays_lib
 except ImportError:
     raise SystemExit(

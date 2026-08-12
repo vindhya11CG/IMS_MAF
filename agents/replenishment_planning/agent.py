@@ -129,7 +129,7 @@ class ReplenishmentPlanningAgent:
         for order in orders:
             priority_counts[order.order_priority] += 1
             total_cost += order.total_cost
-            total_lead_time += order.lead_time_days
+            total_lead_time += max(1, int(getattr(order, "lead_time_days", 1) or 1))
         
         avg_lead_time = (
             total_lead_time / len(orders) if orders else 0

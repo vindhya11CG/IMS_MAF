@@ -38,7 +38,58 @@ async def get_snapshots(state: AppState = Depends(get_app_state)):
 @router.get("/positions")
 async def get_positions(state: AppState = Depends(get_app_state)):
     """Get all baseline inventory positions (Agent 1 Input)."""
-    return state.raw_data.get("positions", [])
+    raw_positions = state.raw_data.get("positions", [])
+    raw_snapshots = state.raw_data.get("snapshots")
+
+    if raw_snapshots is None:
+        raw_snapshots = CsvInventoryDataLoader().load_inventory_daily_snapshots()
+
+    positions = [
+        InventoryPosition(
+            position_id=pos.get("position_id", 0),
+            sku_id=pos["sku_id"],
+            location_id=pos["location_id"],
+            on_hand_qty=pos.get("on_hand_qty", 0),
+            safety_stock_qty=pos.get("safety_stock_qty", 0),
+            reorder_point_qty=pos.get("reorder_point_qty", 0),
+            allocated_qty=pos.get("allocated_qty", 0),
+            last_counted_date=pos.get("last_counted_date"),
+        )
+        for pos in raw_positions
+    ]
+
+    snapshots = [
+        InventorySnapshot(
+            snapshot_id=snapshot.get("snapshot_id", 0),
+            snapshot_date=snapshot.get("snapshot_date", ""),
+            sku_id=snapshot["sku_id"],
+            location_id=snapshot["location_id"],
+            opening_stock=snapshot.get("opening_stock", 0),
+            receipts=snapshot.get("receipts", 0),
+            sales=snapshot.get("sales", 0),
+            transfers_in=snapshot.get("transfers_in", 0),
+            transfers_out=snapshot.get("transfers_out", 0),
+            adjustments=snapshot.get("adjustments", 0),
+            closing_stock=snapshot.get("closing_stock", 0),
+        )
+        for snapshot in raw_snapshots
+    ]
+
+    calculation_results = InventoryCalculationService().execute(positions, snapshots)
+    current_stock_by_key = {
+        (result.sku_id, result.location_id): result.current_stock
+        for result in calculation_results
+    }
+
+    positions_with_current = []
+    for pos in raw_positions:
+        current_stock = current_stock_by_key.get(
+            (pos.get("sku_id"), pos.get("location_id")),
+            pos.get("on_hand_qty", 0),
+        )
+        positions_with_current.append({**pos, "current_stock": current_stock})
+
+    return positions_with_current
 
 
 def _build_engineering_payload(item: dict) -> dict:

@@ -195,7 +195,7 @@ class PredictRequest(BaseModel):
     season_multiplier: float = Field(1.0, description="Seasonal demand multiplier.", ge=0.0)
     category_id: int = Field(0, description="Product category identifier.", ge=0)
     velocity_class_id: int = Field(0, description="Velocity class identifier.", ge=0)
-    horizon_days: int = Field(14, description="Forecast horizon in days.", ge=1, le=365)
+    date: Optional[str] = Field(None, description="Optional ISO-8601 target date (YYYY-MM-DD).")
     # Phase 6: Weather & Festival fields
     weather_demand_multiplier: Optional[float] = Field(1.0, description="Weather-based demand multiplier.", ge=0.0)
     weather_severity_index: Optional[float] = Field(0.0, description="Weather severity index (0.0 to 1.0).", ge=0.0, le=1.0)
@@ -218,11 +218,15 @@ class PredictData(BaseModel):
     product_id: int
     location_id: int
     predicted_demand: float
-    confidence_score: float
+    confidence_score: float = Field(..., ge=0.0, le=100.0)
     prediction_interval: PredictionInterval
     model_used: str
     horizon_days: int
     latency_ms: float
+    event_type: Optional[str] = Field("", description="Primary event type: festival, weather, weekend, or empty.")
+    event_detail: Optional[str] = Field("", description="Human-readable event detail.")
+    event_types: Optional[List[str]] = Field(default_factory=list, description="All active event types.")
+    event_details: Optional[List[str]] = Field(default_factory=list, description="All active event details.")
 
 
 # ---------------------------------------------------------------------------
@@ -306,10 +310,12 @@ class BatchPredictResultItem(BaseModel):
     product_id: Optional[int]
     location_id: Optional[int]
     predicted_demand: float
-    confidence_score: float
+    confidence_score: float = Field(..., ge=0.0, le=100.0)
     prediction_interval: PredictionInterval
     model_used: str
     latency_ms: float
+    event_type: Optional[str] = Field("", description="Primary event type: festival, weather, weekend, or empty.")
+    event_detail: Optional[str] = Field("", description="Human-readable event detail.")
 
 
 class BatchPredictData(BaseModel):
@@ -364,10 +370,12 @@ class ForecastRequest(BaseModel):
 class ForecastDayResult(BaseModel):
     date: str
     forecasted_demand: float
-    confidence: float
+    confidence: float = Field(..., ge=0.0, le=100.0)
     prediction_interval: PredictionInterval
     trend: str = Field(..., description="INCREASING | DECREASING | STABLE")
     seasonality: str = Field(..., description="HIGH | MEDIUM | NORMAL")
+    event_type: Optional[str] = Field("", description="Primary event type: festival, weather, weekend, or empty.")
+    event_detail: Optional[str] = Field("", description="Human-readable event detail.")
 
 
 class ForecastData(BaseModel):
@@ -440,7 +448,7 @@ class ReorderData(BaseModel):
     forecasted_demand: float
     available_stock: int
     projected_stock_after_lead_time: float
-    confidence: float
+    confidence: float = Field(..., ge=0.0, le=100.0)
 
 
 # ---------------------------------------------------------------------------
@@ -500,7 +508,13 @@ class RiskData(BaseModel):
     forecasted_demand: float
     current_stock: int
     projected_stock: float
-    confidence: float
+    confidence: float = Field(..., ge=0.0, le=100.0)
+    days_until_stockout: int
+    days_until_safety_stock_breach: Optional[int] = None
+    days_until_reorder: int
+    estimated_stockout_date: Optional[str] = None
+    recommended_reorder_date: Optional[str] = None
+    optimal_reorder_date: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
